@@ -7,7 +7,9 @@ from datetime import datetime
 from typing import List, Optional
 
 from src.config import TIMEFRAME_LABELS
-from src.ichimoku import IchimokuResult, IchimokuCloud, IchimokuTKCross, IchimokuChikou, IchimokuFlatLines
+from src.ichimoku import (IchimokuResult, IchimokuCloud, IchimokuTKCross,
+    IchimokuChikou, IchimokuFlatLines, IchimokuThreeRules,
+    IchimokuTwist, IchimokuLaggingConfirmation)
 
 # ---------------------------------------------------------------------------
 # Codes ANSI pour les couleurs
@@ -110,7 +112,7 @@ def _chikou_str(chikou: 'IchimokuChikou') -> str:
 
 
 def _flat_str(flat: Optional['IchimokuFlatLines']) -> str:
-    """Indicateurs des lignes plates."""
+    """Indicateurs des lignes plates et SSB historiques."""
     if not flat:
         return f"{DIM}N/A{RESET}"
     parts = []
@@ -126,7 +128,54 @@ def _flat_str(flat: Optional['IchimokuFlatLines']) -> str:
         parts.append(f"{DIM}NUAGE FIN{RESET}")
     if flat.kijun_flat_bars >= 10:
         parts.append(f"{YELLOW}KJ PLAT {flat.kijun_flat_bars}B{RESET}")
+    
+    # SSB plates historiques
+    if flat.ssb_history and flat.ssb_history.levels:
+        nb_levels = len(flat.ssb_history.levels)
+        parts.append(f"{BLUE}SSBx{nb_levels}{RESET}")
+        if flat.ssb_history.nearest_above:
+            parts.append(f"{RED}R:{flat.ssb_history.nearest_above:.5f}{RESET}")
+        if flat.ssb_history.nearest_below:
+            parts.append(f"{GREEN}S:{flat.ssb_history.nearest_below:.5f}{RESET}")
+    
     return " ".join(parts) if parts else ""
+
+
+def _three_rules_str(rules: Optional['IchimokuThreeRules']) -> str:
+    """Affichage des 3 regles d'or."""
+    if not rules:
+        return f"{DIM}N/A{RESET}"
+    if rules.all_valid:
+        return f"{GREEN}3/3 VALIDE{RESET}"
+    return f"{YELLOW}{rules.rules_validated}/3{RESET}"
+
+
+def _twist_str(twist: Optional['IchimokuTwist']) -> str:
+    """Affichage du twist."""
+    if not twist:
+        return ""
+    if twist.twist_active:
+        if "ROUGE->VERT" in (twist.twist_type or ""):
+            return f"{GREEN}TWIST HAUSSIER{RESET}"
+        elif "VERT->ROUGE" in (twist.twist_type or ""):
+            return f"{RED}TWIST BAISSIER{RESET}"
+        return f"{YELLOW}TWIST{RESET}"
+    return ""
+
+
+def _lagging_str(lag: Optional['IchimokuLaggingConfirmation']) -> str:
+    """Affichage de la confirmation Lagging Span."""
+    if not lag:
+        return f"{DIM}N/A{RESET}"
+    if lag.power_confirmed:
+        if lag.confirmation_bullish:
+            return f"{GREEN}CONFIRME HAUT{RESET}"
+        return f"{RED}CONFIRME BAS{RESET}"
+    if lag.chikou_françit_kijun:
+        return f"{YELLOW}FRANCHIT KIJUN{RESET}"
+    if lag.chikou_françit_nuage:
+        return f"{YELLOW}FRANCHIT NUAGE{RESET}"
+    return f"{DIM}PAS CONFIRME{RESET}"
 
 
 def format_px(value: float, decimals: int = 5) -> str:
@@ -191,10 +240,20 @@ def print_kijun_results(results: List[IchimokuResult],
         # Lignes plates
         flat_str = _flat_str(r.flat)
 
+        # 3 Regles
+        rules_str = _three_rules_str(r.three_rules)
+
+        # Twist
+        twist_str = _twist_str(r.twist)
+
+        # Lagging confirmation
+        lag_str = _lagging_str(r.lagging_confirmation)
+
+        all_extra = " ".join(filter(None, [twist_str, lag_str, flat_str]))
         print(f"{r.symbol:<10} {r.timeframe_label:<4} "
               f"{format_px(r.current_price):<11} "
               f"{format_px(r.kijun_sen):<11} "
-              f"{dist_str:<20} {cloud_str:<12} {tk_str:<10} {chikou_str:<25} {flat_str}")
+              f"{dist_str:<14} {cloud_str:<12} {tk_str:<10} {chikou_str:<22} {rules_str:<10} {all_extra}")
 
     # Resume
     print(f"{DIM}{'-'*88}{RESET}")
@@ -218,7 +277,11 @@ def print_kijun_results(results: List[IchimokuResult],
     chikou_align = sum(1 for r in results if r.chikou and r.chikou.bullish_alignment)
     kijun_flat = sum(1 for r in results if r.flat and r.flat.kijun_flat)
     cloud_thin = sum(1 for r in results if r.flat and r.flat.cloud_thin)
+    rules_3_3 = sum(1 for r in results if r.three_rules and r.three_rules.all_valid)
+    twist_count = sum(1 for r in results if r.twist and r.twist.twist_active)
+    lag_confirm = sum(1 for r in results if r.lagging_confirmation and r.lagging_confirmation.power_confirmed)
     print(f"{DIM}  Nuage: {above_cloud} au-dessus / {inside_cloud} dans nuage | TK>K: {tk_up} | Chikou aligne: {chikou_align}{RESET}")
+    print(f"{DIM}  3 regles: {rules_3_3} valides | Twist: {twist_count} | Lagging confirme: {lag_confirm}{RESET}")
     print(f"{DIM}  Kijun plat: {kijun_flat} | Nuage fin: {cloud_thin}{RESET}")
     print()
 
@@ -252,9 +315,24 @@ def print_detailed_result(r: IchimokuResult) -> None:
         print(f"  Chikou             : {_chikou_str(r.chikou)}")
         print(f"    Valeur           : {format_px(r.chikou.value)}")
         print(f"    > Prix 26         : {'Oui' if r.chikou.above_price_26 else 'Non'}")
+    if r.three_rules:
+        print(f"  {'='*45}")
+        print(f"  {BOLD}LES 3 REGLES D'OR{RESET}")
+        print(f"  {'='*45}")
+        print(f"  Regle 1 (Nuage)   : {r.three_rules.rule1_detail} {'OK' if r.three_rules.rule1_cloud else 'KO'}")
+        print(f"  Regle 2 (Chikou)  : {r.three_rules.rule2_detail} {'OK' if r.three_rules.rule2_chikou else 'KO'}")
+        print(f"  Regle 3 (TK)      : {r.three_rules.rule3_detail} {'OK' if r.three_rules.rule3_tk else 'KO'}")
+        print(f"  Score             : {r.three_rules.rules_validated}/3")
+        print(f"  Signal            : {r.three_rules.signal_type}")
+    if r.twist and r.twist.twist_active:
+        print(f"  Twist              : {_twist_str(r.twist)}")
+        print(f"    Couleur         : {r.twist.previous_color} -> {r.twist.current_color}")
+    if r.lagging_confirmation:
+        print(f"  Lagging Span       : {_lagging_str(r.lagging_confirmation)}")
+        print(f"    Detail          : {r.lagging_confirmation.detail}")
     if r.flat:
         print(f"  {'='*45}")
-        print(f"  {BOLD}LIGNES PASSÉES / FUTURES / PLATES{RESET}")
+        print(f"  {BOLD}LIGNES PASSÉES / FUTURES / PLATES / SSB{RESET}")
         print(f"  {'='*45}")
         print(f"  Ligne passee (Chikou affiche): {format_px(r.flat.past_chikou)}")
         print(f"    Chikou plat                : {'Oui' if r.flat.past_chikou_flat else 'Non'}")
@@ -268,6 +346,26 @@ def print_detailed_result(r: IchimokuResult) -> None:
         print(f"  Tenkan plat                 : {'Oui' if r.flat.tenkan_flat else 'Non'}")
         print(f"  Epaisseur nuage             : {format_px(r.flat.cloud_thickness)}")
         print(f"  Nuage fin                   : {'Oui' if r.flat.cloud_thin else 'Non'}")
+        
+        # SSB plates historiques
+        if r.flat.ssb_history and r.flat.ssb_history.levels:
+            print(f"  {'='*45}")
+            print(f"  {BOLD}SSB PLATES HISTORIQUES (supports/resistances){RESET}")
+            print(f"  {'='*45}")
+            print(f"  {len(r.flat.ssb_history.levels)} niveaux detectes")
+            if r.flat.ssb_history.nearest_above:
+                print(f"  Resistance la plus proche : {r.flat.ssb_history.nearest_above:.6f}")
+            if r.flat.ssb_history.nearest_below:
+                print(f"  Support le plus proche    : {r.flat.ssb_history.nearest_below:.6f}")
+            print()
+            print(f"  {'Niveau':<14} {'Bars':<6} {'Dist%':<8} {'Position':<12} {'Age':<6}")
+            print(f"  {'-'*46}")
+            for lvl in r.flat.ssb_history.levels[:8]:
+                dist_color = GREEN if lvl.position == "EN-DESSOUS" else RED
+                arrow = "v" if lvl.position == "AU-DESSUS" else "^"
+                print(f"  {lvl.level:<14.6f} {lvl.bars_count:<6} "
+                      f"{dist_color}{lvl.price_distance_pct:<7.3f}%{RESET} "
+                      f"{arrow} {lvl.position:<10} {lvl.age_bars:<6}")
     print(f"  Bougies analysees  : {r.bars_count}")
     print()
 

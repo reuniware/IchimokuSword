@@ -38,6 +38,31 @@ class IchimokuChikou:
 
 
 @dataclass
+class SsbFlatLevel:
+    """Niveau SSB plat historique (support/resistance potentiel)."""
+    level: float             # Valeur du niveau
+    bars_count: int          # Nombre de bougies plates consecutives
+    price_distance_pct: float  # Distance du prix actuel a ce niveau (%)
+    position: str            # "AU-DESSUS" ou "EN-DESSOUS"
+    age_bars: int            # Depuis combien de bougies ce niveau a ete forme
+
+
+@dataclass
+class IchimokuSsbHistory:
+    """Analyse historique de la SSB (Senkou Span B) pour detecter
+    les zones de support/resistance issues d'anciennes SSB plates.
+    Une SSB plate sur plusieurs bougies forme un niveau horizontal
+    qui agit comme support ou resistance plus tard.
+    """
+    levels: List[SsbFlatLevel]       # Niveaux SSB plats detectes
+    strongest_level: Optional[SsbFlatLevel]  # Le niveau le plus fort
+    above_levels: List[SsbFlatLevel]  # Niveaux au-dessus du prix (resistances)
+    below_levels: List[SsbFlatLevel]  # Niveaux en-dessous du prix (supports)
+    nearest_above: Optional[float]    # Resistance la plus proche
+    nearest_below: Optional[float]    # Support le plus proche
+
+
+@dataclass
 class IchimokuFlatLines:
     """Analyse des lignes plates et projections passe/futur."""
     # Lignes passees (ce qui est affiche decale en arriere)
@@ -59,6 +84,59 @@ class IchimokuFlatLines:
     # Epaisseur nuage actuel
     cloud_thickness: float       # Epaisseur du nuage = |Senkou A - Senkou B|
     cloud_thin: bool             # Nuage fin (< 0.1% du prix)
+    
+    # SSB plates historiques
+    ssb_history: Optional[IchimokuSsbHistory] = None
+
+
+@dataclass
+class IchimokuThreeRules:
+    """Les 3 regles d'or Ichimoku (Karen Péloille)."""
+    # Regle 1: Prix au-dessus du nuage (haussier) ou en-dessous (baissier)
+    rule1_cloud: bool               # True si prix du bon cote du nuage
+    rule1_detail: str               # "AU-DESSUS", "EN-DESSOUS", "DANS-NUAGE"
+    
+    # Regle 2: Chikou aligne (au-dessus du prix 26 + dans la bonne direction)
+    rule2_chikou: bool              # True si Chikou aligne
+    rule2_detail: str               # "ALIGNE", "NON-ALIGNE", "N/A"
+    
+    # Regle 3: TK Cross dans la direction du trade
+    rule3_tk: bool                  # True si TK confirme
+    rule3_detail: str               # "TK>K", "K>TK", "TK_CROSS_HAUSSIER", etc.
+    
+    # Score global (0-3)
+    rules_validated: int            # Nombre de regles validees (0-3)
+    all_valid: bool                 # True si les 3 regles sont validees
+    signal_type: str                # "HAUSSIER", "BAISSIER", ou "NEUTRE"
+
+
+@dataclass
+class IchimokuTwist:
+    """Detection du 'twist' (croisement Senkou A / Senkou B).
+    Le twist est le point ou le nuage change de couleur.
+    """
+    current_color: str              # "VERT", "ROUGE", "N/A"
+    previous_color: str             # Couleur a la bougie precedente
+    twist_active: bool              # True si twist en cours (changement de couleur)
+    twist_type: Optional[str]       # "VERT->ROUGE" (baissier) ou "ROUGE->VERT" (haussier)
+    bars_since_twist: int           # Bougies depuis le dernier twist
+    twist_distance_pct: float       # Distance du prix au point de twist (%)
+
+
+@dataclass
+class IchimokuLaggingConfirmation:
+    """Confirmation du Chikou Span (Lagging Span).
+    Le Chikou doit franchir le nuage ET la Kijun pour valider.
+    """
+    chikou_above_kijun_past: bool   # Chikou > Kijun d'il y a 26 periodes ?
+    chikou_above_cloud_past: bool   # Chikou au-dessus du nuage d'il y a 26p ?
+    chikou_below_cloud_past: bool   # Chikou en-dessous du nuage d'il y a 26p ?
+    chikou_françit_nuage: bool      # Le Chikou vient-il de franchir le nuage ?
+    chikou_françit_kijun: bool      # Le Chikou vient-il de franchir la Kijun ?
+    confirmation_bullish: bool      # Toutes les conditions haussieres reunies ?
+    confirmation_bearish: bool      # Toutes les conditions baissieres reunies ?
+    power_confirmed: bool           # True si mouvement confirme par le Chikou
+    detail: str                     # Description textuelle
 
 
 @dataclass
@@ -84,6 +162,9 @@ class IchimokuResult:
     tk_cross: Optional[IchimokuTKCross] = None
     chikou: Optional[IchimokuChikou] = None
     flat: Optional[IchimokuFlatLines] = None
+    three_rules: Optional[IchimokuThreeRules] = None
+    twist: Optional[IchimokuTwist] = None
+    lagging_confirmation: Optional[IchimokuLaggingConfirmation] = None
     
     # Raw data
     bars_count: int = 0
@@ -226,6 +307,110 @@ def compute_past_chikou(closes: np.ndarray) -> float:
     return float(closes[-27])
 
 
+def detect_ssb_flat_levels(highs: np.ndarray, lows: np.ndarray,
+                            close_price: float,
+                            lookback_bars: int = 100,
+                            min_flat_bars: int = 3,
+                            tolerance_pct: float = 0.02) -> IchimokuSsbHistory:
+    """Detecte les niveaux SSB plats historiques.
+
+    Parcourt l'historique de la SSB et identifie les segments ou
+    la SSB est restee plate (horizontale) pendant au moins N bougies.
+    Ces niveaux agissent comme supports/resistances.
+
+    Args:
+        highs: Array des plus hauts.
+        lows: Array des plus bas.
+        close_price: Prix actuel.
+        lookback_bars: Nombre de bougies a analyser.
+        min_flat_bars: Nombre minimum de bougies plates pour etre un niveau.
+        tolerance_pct: Tolerance de variation pour considerer "plat" (%).
+
+    Retourne:
+        IchimokuSsbHistory avec les niveaux detectes.
+    """
+    n = len(highs)
+    start_idx = max(0, n - lookback_bars)
+    
+    # Calculer la SSB pour chaque barre
+    ssb_values = []
+    for i in range(start_idx, n):
+        if i >= 52:
+            hh = np.max(highs[i-52:i])
+            ll = np.min(lows[i-52:i])
+            ssb = (hh + ll) / 2.0
+            ssb_values.append((i, float(ssb)))
+        else:
+            ssb_values.append((i, None))
+    
+    # Detecter les segments plats
+    levels = []
+    i = 0
+    while i < len(ssb_values):
+        idx_i, val_i = ssb_values[i]
+        if val_i is None:
+            i += 1
+            continue
+        # Commencer un segment plat
+        seg_start = i
+        j = i + 1
+        while j < len(ssb_values):
+            idx_j, val_j = ssb_values[j]
+            if val_j is None:
+                break
+            seg = [ssb_values[k][1] for k in range(seg_start, j + 1) if ssb_values[k][1] is not None]
+            if len(seg) < 2:
+                j += 1
+                continue
+            variation = (float(np.max(seg)) - float(np.min(seg))) / abs(float(min(seg))) * 100.0 if min(seg) != 0 else 999
+            if variation > tolerance_pct:
+                break
+            j += 1
+        seg_len = j - seg_start
+        if seg_len >= min_flat_bars:
+            seg_vals = [ssb_values[k][1] for k in range(seg_start, j) if ssb_values[k][1] is not None]
+            avg_val = sum(seg_vals) / len(seg_vals)
+            # Distance au prix actuel
+            dist_pct = abs(close_price - avg_val) / avg_val * 100.0 if avg_val != 0 else 999
+            position = "AU-DESSUS" if avg_val > close_price else "EN-DESSOUS"
+            # Age: depuis combien de bougies ce niveau a ete forme
+            last_idx = ssb_values[j - 1][0] if j - 1 >= 0 else 0
+            age = n - 1 - last_idx
+            
+            levels.append(SsbFlatLevel(
+                level=round(avg_val, 6),
+                bars_count=seg_len,
+                price_distance_pct=round(dist_pct, 4),
+                position=position,
+                age_bars=age,
+            ))
+        i = j
+    
+    # Classer: le plus fort = plus de bougies plates
+    levels.sort(key=lambda x: (-x.bars_count, x.price_distance_pct))
+    strongest = levels[0] if levels else None
+    above = [l for l in levels if l.position == "AU-DESSUS"]
+    below = [l for l in levels if l.position == "EN-DESSOUS"]
+    
+    # Niveaux les plus proches
+    nearest_above = min((l.level for l in above), default=None)
+    nearest_below = max((l.level for l in below), default=None)
+    
+    # Garder les plus significatifs (max 10)
+    levels = levels[:10]
+    above = above[:5]
+    below = below[:5]
+    
+    return IchimokuSsbHistory(
+        levels=levels,
+        strongest_level=strongest,
+        above_levels=above,
+        below_levels=below,
+        nearest_above=nearest_above,
+        nearest_below=nearest_below,
+    )
+
+
 def compute_flat_analysis(highs: np.ndarray, lows: np.ndarray,
                            closes: np.ndarray, senkou_a: float,
                            senkou_b: float, kijun: float,
@@ -275,6 +460,9 @@ def compute_flat_analysis(highs: np.ndarray, lows: np.ndarray,
     if close_price > 0 and cloud_thickness > 0:
         cloud_thin = (cloud_thickness / close_price * 100) < 0.1
 
+    # SSB plates historiques
+    ssb_history = detect_ssb_flat_levels(highs, lows, close_price, 100, 3, 0.02)
+
     return IchimokuFlatLines(
         past_chikou=past_chikou if not np.isnan(past_chikou) else 0.0,
         past_chikou_flat=past_chikou_flat,
@@ -288,6 +476,7 @@ def compute_flat_analysis(highs: np.ndarray, lows: np.ndarray,
         kijun_flat_bars=kijun_flat_bars,
         cloud_thickness=cloud_thickness,
         cloud_thin=cloud_thin,
+        ssb_history=ssb_history,
     )
 
 
@@ -384,6 +573,244 @@ def _compute_chikou_analysis(closes: np.ndarray, kijun: float,
     return IchimokuChikou(value=chikou_value, above_price_26=above, bullish_alignment=align)
 
 
+def compute_three_rules(cloud: Optional[IchimokuCloud], chikou: Optional[IchimokuChikou],
+                          tk: Optional[IchimokuTKCross], above_kijun: bool) -> IchimokuThreeRules:
+    """Les 3 regles d'or d'Ichimoku (Karen Péloille).
+
+    Regle 1: Prix du bon cote du nuage
+    Regle 2: Chikou aligne
+    Regle 3: TK Cross dans la direction
+    """
+    # Regle 1: Position par rapport au nuage
+    if cloud and cloud.above_cloud:
+        r1 = True
+        r1d = "AU-DESSUS"
+        bias = "HAUSSIER"
+    elif cloud and cloud.below_cloud:
+        r1 = True
+        r1d = "EN-DESSOUS"
+        bias = "BAISSIER"
+    elif cloud and cloud.inside_cloud:
+        r1 = False
+        r1d = "DANS-NUAGE"
+        bias = "NEUTRE"
+    else:
+        r1 = False
+        r1d = "N/A"
+        bias = "NEUTRE"
+
+    # Regle 2: Chikou aligne
+    if chikou and chikou.bullish_alignment:
+        r2 = True
+        r2d = "ALIGNE"
+        if bias == "NEUTRE":
+            bias = "HAUSSIER"
+    elif chikou and not chikou.above_price_26:
+        r2 = False
+        r2d = "NON-ALIGNE"
+        bias = "BAISSIER" if bias == "NEUTRE" else bias
+    elif chikou:
+        r2 = False
+        r2d = "NON-ALIGNE"
+    else:
+        r2 = False
+        r2d = "N/A"
+
+    # Regle 3: TK Cross
+    if tk and tk.cross_type == "TK_CROSS_HAUSSIER":
+        r3 = True
+        r3d = "TK_CROSS_HAUSSIER"
+        bias = "HAUSSIER"
+    elif tk and tk.cross_type == "TK_CROSS_BAISSIER":
+        r3 = True
+        r3d = "TK_CROSS_BAISSIER"
+        bias = "BAISSIER"
+    elif tk and tk.current_position == "TENKAN_HAUT":
+        r3 = False
+        r3d = "TK>K"
+    elif tk and tk.current_position == "KIJUN_HAUT":
+        r3 = False
+        r3d = "K>TK"
+    else:
+        r3 = False
+        r3d = "N/A"
+
+    validated = sum([r1, r2, r3])
+    signal_type = bias
+    if bias == "NEUTRE" or (r1 and r2 and r3):
+        signal_type = "HAUSSIER" if (r1 and r2 and r3) else bias
+
+    return IchimokuThreeRules(
+        rule1_cloud=r1, rule1_detail=r1d,
+        rule2_chikou=r2, rule2_detail=r2d,
+        rule3_tk=r3, rule3_detail=r3d,
+        rules_validated=validated,
+        all_valid=(validated == 3),
+        signal_type=signal_type,
+    )
+
+
+def compute_twist(highs: np.ndarray, lows: np.ndarray,
+                  senkou_a: float, senkou_b: float,
+                  close_price: float) -> Optional[IchimokuTwist]:
+    """Detecte le 'twist' (croisement Senkou A / Senkou B).
+
+    Le twist est le point ou le nuage change de couleur (Vert <-> Rouge).
+    C'est une zone de retournement potentiel.
+    """
+    if np.isnan(senkou_a) or np.isnan(senkou_b):
+        return None
+
+    current_color = "VERT" if senkou_a > senkou_b else "ROUGE"
+
+    # Couleur precedente (26 bougies avant pour le Senkou projete)
+    n = len(highs)
+    prev_a = float("nan")
+    prev_b = float("nan")
+    if n >= 27:
+        tk_p = compute_tenkan_sen(highs[:-1], lows[:-1], 9)
+        kj_p = compute_kijun_sen(highs[:-1], lows[:-1], 26)
+        if not np.isnan(tk_p) and not np.isnan(kj_p):
+            prev_a = (tk_p + kj_p) / 2.0
+            prev_b = (np.max(highs[-53:-1]) + np.min(lows[-53:-1])) / 2.0 if n >= 53 else float("nan")
+    else:
+        prev_a = senkou_a
+        prev_b = senkou_b
+
+    if np.isnan(prev_a) or np.isnan(prev_b):
+        previous_color = current_color
+    else:
+        previous_color = "VERT" if prev_a > prev_b else "ROUGE"
+
+    twist_active = current_color != previous_color
+    twist_type = None
+    if twist_active:
+        twist_type = f"{previous_color}->{current_color}"
+
+    # Distance au twist (approximation: point ou A = B)
+    twist_price = abs(senkou_a + senkou_b) / 2.0
+    twist_dist = abs(close_price - twist_price) / twist_price * 100 if twist_price > 0 else 999
+
+    # Bougies depuis le dernier twist
+    bars_since = 99
+    if twist_active:
+        bars_since = 0
+    else:
+        for i in range(1, min(50, n - 26)):
+            hh = highs[:n - i]
+            ll = lows[:n - i]
+            if len(hh) < 52:
+                break
+            ta = compute_tenkan_sen(hh, ll, 9)
+            ka = compute_kijun_sen(hh, ll, 26)
+            if np.isnan(ta) or np.isnan(ka):
+                break
+            sa_i = (ta + ka) / 2.0
+            sb_i = (np.max(hh[-52:]) + np.min(ll[-52:])) / 2.0
+            if np.isnan(sa_i) or np.isnan(sb_i):
+                break
+            col_i = "VERT" if sa_i > sb_i else "ROUGE"
+            if col_i != current_color:
+                bars_since = i - 1
+                break
+
+    return IchimokuTwist(
+        current_color=current_color,
+        previous_color=previous_color,
+        twist_active=twist_active,
+        twist_type=twist_type,
+        bars_since_twist=bars_since,
+        twist_distance_pct=round(twist_dist, 4),
+    )
+
+
+def compute_lagging_confirmation(highs: np.ndarray, lows: np.ndarray,
+                                   closes: np.ndarray, kijun: float,
+                                   senkou_a: float, senkou_b: float,
+                                   above_kijun: bool) -> Optional[IchimokuLaggingConfirmation]:
+    """Confirmation Lagging Span (Chikou).
+
+    Le Chikou doit franchir le nuage ET la Kijun pour valider un mouvement.
+    Si le Chikou echoue a traverser = manque de puissance.
+    """
+    n = len(highs)
+    if n < 53:
+        return None
+
+    chikou_val = float(closes[-1])  # Chikou = close actuel
+
+    # Kijun d'il y a 26 periodes
+    kijun_26_ago = compute_kijun_sen(highs[:-26], lows[:-26], 26) if n >= 52 else float("nan")
+
+    # Nuage d'il y a 26 periodes = Senkou A/B calcules 26 bougies avant
+    if n >= 52:
+        ta_26 = compute_tenkan_sen(highs[:-26], lows[:-26], 9) if n >= 35 else float("nan")
+        ka_26 = compute_kijun_sen(highs[:-26], lows[:-26], 26) if n >= 52 else float("nan")
+        if not np.isnan(ta_26) and not np.isnan(ka_26):
+            sa_26 = (ta_26 + ka_26) / 2.0
+            sb_26 = (np.max(highs[-78:-26]) + np.min(lows[-78:-26])) / 2.0 if n >= 78 else float("nan")
+        else:
+            sa_26 = float("nan")
+            sb_26 = float("nan")
+    else:
+        sa_26 = float("nan")
+        sb_26 = float("nan")
+
+    # Analyses
+    above_kijun_26 = chikou_val > kijun_26_ago if not np.isnan(kijun_26_ago) else False
+    above_cloud_26 = False
+    below_cloud_26 = False
+    if not np.isnan(sa_26) and not np.isnan(sb_26):
+        above_cloud_26 = chikou_val > max(sa_26, sb_26)
+        below_cloud_26 = chikou_val < min(sa_26, sb_26)
+
+    # Detection franchissement Kijun
+    if n >= 54 and not np.isnan(kijun_26_ago):
+        chikou_prev = float(closes[-2])
+        above_kijun_prev = chikou_prev > kijun_26_ago
+        franchit_kijun = not above_kijun_prev and above_kijun_26
+    else:
+        franchit_kijun = False
+
+    # Detection franchissement nuage
+    franchit_nuage = False
+    if n >= 54 and not np.isnan(sa_26):
+        chikou_prev = float(closes[-2])
+        above_cloud_prev = chikou_prev > max(sa_26, sb_26) if not np.isnan(sa_26) else above_cloud_26
+        franchit_nuage = not above_cloud_prev and above_cloud_26
+
+    confirmation_h = above_kijun_26 and above_cloud_26 and above_kijun
+    confirmation_b = not above_kijun_26 and below_cloud_26 and not above_kijun
+    power = confirmation_h or confirmation_b
+
+    parts = []
+    if confirmation_h:
+        parts.append("HAUSSIER CONFIRME")
+    elif confirmation_b:
+        parts.append("BAISSIER CONFIRME")
+    if franchit_kijun:
+        parts.append("FRANCHIT KIJUN")
+    if franchit_nuage:
+        parts.append("FRANCHIT NUAGE")
+    if not power:
+        if above_kijun_26:
+            parts.append("CHIKOU>K26 MAIS PAS NUAGE")
+        else:
+            parts.append("CHIKOU PAS CONFIRME")
+
+    return IchimokuLaggingConfirmation(
+        chikou_above_kijun_past=above_kijun_26,
+        chikou_above_cloud_past=above_cloud_26,
+        chikou_below_cloud_past=below_cloud_26,
+        chikou_françit_nuage=franchit_nuage,
+        chikou_françit_kijun=franchit_kijun,
+        confirmation_bullish=confirmation_h,
+        confirmation_bearish=confirmation_b,
+        power_confirmed=power,
+        detail=" | ".join(parts) if parts else "PAS DE SIGNAL",
+    )
+
+
 def compute_full_ichimoku(
     symbol: str,
     timeframe_label: str,
@@ -394,7 +821,7 @@ def compute_full_ichimoku(
     opens: Optional[np.ndarray] = None,
     kijun_period: int = 26,
 ) -> Optional[IchimokuResult]:
-    """Analyse Ichimoku complete (5 elements + structure).
+    """Analyse Ichimoku complete (5 elements + structure + 3 regles + twist + lagging).
 
     Args:
         symbol: Nom du symbole.
@@ -446,6 +873,15 @@ def compute_full_ichimoku(
         senkou_a, senkou_b, kijun, tenkan, close_price,
     ) if not np.isnan(kijun) else None
 
+    # Les 3 regles d'or
+    three_rules = compute_three_rules(cloud, chikou_analysis, tk, above_kijun)
+
+    # Detection du twist
+    twist = compute_twist(highs, lows, senkou_a, senkou_b, close_price)
+
+    # Confirmation Lagging Span
+    lagging = compute_lagging_confirmation(highs, lows, closes, kijun, senkou_a, senkou_b, above_kijun)
+
     return IchimokuResult(
         symbol=symbol,
         timeframe_label=timeframe_label,
@@ -461,6 +897,9 @@ def compute_full_ichimoku(
         tk_cross=tk,
         chikou=chikou_analysis,
         flat=flat_analysis,
+        three_rules=three_rules,
+        twist=twist,
+        lagging_confirmation=lagging,
         bars_count=len(highs),
         all_highs=[float(h) for h in highs],
         all_lows=[float(l) for l in lows],
