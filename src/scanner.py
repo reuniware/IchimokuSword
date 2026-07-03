@@ -10,7 +10,7 @@ import MetaTrader5 as mt5
 
 from src.config import TIMEFRAME_LABELS, ScanConfig
 from src.display import print_kijun_results
-from src.ichimoku import IchimokuResult, analyze_kijun_proximity
+from src.ichimoku import IchimokuResult, compute_full_ichimoku
 from src.mt5_connector import MT5Connector
 
 logger = logging.getLogger("ichimoku.scanner")
@@ -42,33 +42,34 @@ class KijunScanner:
             logger.debug("Impossible de sélectionner %s", symbol)
             return None
 
-        # Récupérer les données
-        needed_bars = max(self.config.min_bars, self.config.kijun_period + 10)
+        # Récupérer les données (besoin de plus de bougies pour Chikou/Senkou)
+        needed_bars = max(self.config.min_bars, self.config.kijun_period + 30)
         rates = self.connector.get_rates(symbol, timeframe, count=needed_bars)
-        if rates is None or len(rates) < self.config.kijun_period:
+        if rates is None or len(rates) < self.config.kijun_period + 5:
             return None
 
         # Extraire les colonnes
         highs = rates["high"]
         lows = rates["low"]
         closes = rates["close"]
+        opens = rates["open"]
 
-        # Prix actuel = close de la bougie la plus récente
+        # Prix actuel via tick
         current_price = float(closes[-1])
-
-        # Récupérer le tick pour un prix plus précis
         tick = self.connector.get_symbol_tick(symbol)
         if tick is not None:
             current_price = (tick.bid + tick.ask) / 2.0
 
-        # Analyse Ichimoku
+        # Analyse Ichimoku complete (5 elements)
         timeframe_label = TIMEFRAME_LABELS.get(timeframe, str(timeframe))
-        result = analyze_kijun_proximity(
+        result = compute_full_ichimoku(
             symbol=symbol,
             timeframe_label=timeframe_label,
             close_price=current_price,
             highs=highs,
             lows=lows,
+            closes=closes,
+            opens=opens,
             kijun_period=self.config.kijun_period,
         )
         return result
