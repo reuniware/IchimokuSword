@@ -63,11 +63,19 @@ TIMEFRAMES = {
            "lookaheads": [6, 18, 30, 60, 120],
            "la_display": ["6H", "18H", "30H", "60H", "120H"],
            "max_bars_default": 5000},
+    "H1": {"mt5": mt5.TIMEFRAME_H1, "label": "H1",
+           "lookaheads": [6, 18, 30, 60, 120],
+           "la_display": ["6H", "18H", "30H", "60H", "120H"],
+           "max_bars_default": 10000},
 }
 
-MTF_TIMEFRAMES = {
-    "D1": mt5.TIMEFRAME_D1,
-    "W1": mt5.TIMEFRAME_W1,
+# MTF pairs: entry TF -> [higher TFs for Chikou validation + TP]
+MTF_PAIRS = {
+    "D1": {"tfs": [(None, "W1", mt5.TIMEFRAME_W1, 500)], "mtf_label": "W1"},
+    "H4": {"tfs": [("D1", mt5.TIMEFRAME_D1, 2000), ("W1", mt5.TIMEFRAME_W1, 500)],
+            "mtf_label": "D1/W1"},
+    "H1": {"tfs": [("H4", mt5.TIMEFRAME_H4, 5000), ("D1", mt5.TIMEFRAME_D1, 2000)],
+            "mtf_label": "H4/D1"},
 }
 
 MIN_BARS = 53
@@ -353,6 +361,70 @@ def chikou_free_mtf(
     return len(blocked) == 0, blocked
 
 
+# --- Versions dynamiques (utilisent MTF_PAIRS) ---
+
+def chikou_free_mtf_dyn(entry_time: int, direction: str,
+                         mtf_pair: dict, mtf_rates: dict) -> Tuple[bool, List[str]]:
+    """Version dynamique de chikou_free_mtf utilisant MTF_PAIRS."""
+    blocked = []
+    lookback = entry_time - 3600
+    for name, _, _ in mtf_pair["tfs"]:
+        rates = mtf_rates.get(name)
+        if rates is None:
+            continue
+        idx = _find_bar_index(rates['time'], lookback)
+        if idx < 78:
+            continue
+        chikou_val = float(rates['close'][idx])
+        highs = rates['high'][:idx+1]
+        lows = rates['low'][:idx+1]
+        t26 = (np.max(highs[idx-34:idx-26+1]) + np.min(lows[idx-34:idx-26+1])) / 2.0
+        k26 = (np.max(highs[idx-51:idx-26+1]) + np.min(lows[idx-51:idx-26+1])) / 2.0
+        s26 = (np.max(highs[idx-77:idx-26+1]) + np.min(lows[idx-77:idx-26+1])) / 2.0
+        if direction == "LONG":
+            if chikou_val <= t26: blocked.append(f"{name}_Tenkan26")
+            if chikou_val <= k26: blocked.append(f"{name}_Kijun26")
+            if chikou_val <= s26: blocked.append(f"{name}_SSB26")
+        else:
+            if chikou_val >= t26: blocked.append(f"{name}_Tenkan26")
+            if chikou_val >= k26: blocked.append(f"{name}_Kijun26")
+            if chikou_val >= s26: blocked.append(f"{name}_SSB26")
+    return len(blocked) == 0, blocked
+
+
+def compute_mtf_tp_dyn(entry_time: int, entry_price: float, direction: str,
+                        mtf_pair: dict, mtf_rates: dict,
+                        min_distance_pct: float = 0.3) -> Optional[dict]:
+    """Version dynamique de compute_mtf_tp utilisant MTF_PAIRS."""
+    all_levels = []
+    lookback = entry_time - 3600
+    for name, _, _ in mtf_pair["tfs"]:
+        rates = mtf_rates.get(name)
+        if rates is None:
+            continue
+        idx = _find_bar_index(rates['time'], lookback)
+        if idx < 52:
+            continue
+        lv = _compute_ichimoku_levels(rates['high'][:idx+1], rates['low'][:idx+1])
+        for lname in ["tenkan", "kijun", "ssb", "senkou_a"]:
+            if lv[lname] is not None and not np.isnan(lv[lname]):
+                all_levels.append((f"{name}_{lname}", lv[lname]))
+    if not all_levels:
+        return None
+    if direction == "LONG":
+        candidates = [(s, l) for s, l in all_levels if l > entry_price]
+        if not candidates: return None
+        src, lvl = min(candidates, key=lambda x: x[1])
+    else:
+        candidates = [(s, l) for s, l in all_levels if l < entry_price]
+        if not candidates: return None
+        src, lvl = max(candidates, key=lambda x: x[1])
+    dist = abs(lvl - entry_price) / entry_price * 100.0
+    if dist < min_distance_pct:
+        return None
+    return {"tp_price": round(lvl, 5), "tp_source": src, "tp_distance_pct": round(dist, 3)}
+
+
 # ---------------------------------------------------------------------------
 # Backtest d'un symbole (avec ou sans MTF)
 # ---------------------------------------------------------------------------
@@ -371,8 +443,9 @@ def backtest_symbol(mt5_name: str, max_bars: int = 2000,
     lookaheads = tf_cfg["lookaheads"]
     tf_lbl = tf_cfg["label"]
 
+    mtf_pair = MTF_PAIRS.get(timeframe) if use_mtf else None
     if not quiet:
-        mtf_str = " + MTF(D1/W1) TP" if use_mtf else ""
+        mtf_str = f" + MTF({mtf_pair['mtf_label']}) TP" if mtf_pair else ""
         print(f"  {mt5_name} ({tf_lbl}{mtf_str})... ", end="", flush=True)
 
     mt5.symbol_select(mt5_name, True)
@@ -383,14 +456,11 @@ def backtest_symbol(mt5_name: str, max_bars: int = 2000,
             print(f"PAS ASSEZ DE DONNEES ({n} barres)")
         return [], {"mtf_chikou_checked": 0, "mtf_chikou_skipped": 0}
 
-    # --- Pré-charger D1 et W1 si MTF activé ---
-    d1_rates = None
-    w1_rates = None
-    if use_mtf:
-        d1_rates = mt5.copy_rates_from_pos(
-            mt5_name, MTF_TIMEFRAMES["D1"], 0, 2000)
-        w1_rates = mt5.copy_rates_from_pos(
-            mt5_name, MTF_TIMEFRAMES["W1"], 0, 500)
+    # --- Pré-charger les UT supérieures si MTF activé ---
+    mtf_rates = {}
+    if mtf_pair:
+        for name, tf_mt5, max_b in mtf_pair["tfs"]:
+            mtf_rates[name] = mt5.copy_rates_from_pos(mt5_name, tf_mt5, 0, max_b)
 
     n = len(rates)
     trades = []
@@ -444,13 +514,13 @@ def backtest_symbol(mt5_name: str, max_bars: int = 2000,
             blocked_mtf = []
             tp_info = None
 
-            if use_mtf and d1_rates is not None and w1_rates is not None:
-                h4_time = int(rates['time'][i])
+            if mtf_pair and mtf_rates:
+                entry_time = int(rates['time'][i])
                 mtf_chikou_checked += 1
 
-                # Validation Chikou libre sur D1/W1
-                chikou_ok_mtf, blocked_mtf = chikou_free_mtf(
-                    h4_time, direction, d1_rates, w1_rates)
+                # Validation Chikou libre sur UT supérieures
+                chikou_ok_mtf, blocked_mtf = chikou_free_mtf_dyn(
+                    entry_time, direction, mtf_pair, mtf_rates)
                 if not chikou_ok_mtf:
                     mtf_chikou_skipped += 1
                     prev2_above = prev_above
@@ -459,9 +529,9 @@ def backtest_symbol(mt5_name: str, max_bars: int = 2000,
                     prev_below = current_below
                     continue
 
-                tp_info = compute_mtf_tp(
-                    mt5_name, h4_time, price, direction,
-                    d1_rates, w1_rates, tp_min_distance,
+                tp_info = compute_mtf_tp_dyn(
+                    entry_time, price, direction, mtf_pair, mtf_rates,
+                    tp_min_distance,
                 )
 
             entry = _build_entry(i, rates, price, direction, lookaheads,

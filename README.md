@@ -116,6 +116,7 @@ python backtest.py --max-bars 500           # Limiter l'historique
 # Backtest mécanique Cloud+Chikou (+ MTF)
 python backtest_cloud_cross.py              # D1, sans MTF
 python backtest_cloud_cross.py --timeframe H4 --mtf     # H4 + TP D1/W1 + filtre Chikou MTF
+python backtest_cloud_cross.py --timeframe H1 --mtf     # H1 + TP H4/D1
 python backtest_cloud_cross.py --tp-min-distance 0.5    # TP min 0.5%
 ```
 
@@ -398,6 +399,7 @@ IchimokuSword/
 | 3 | Scoring 80-101 | D1 | 4 021 | **53.2%** (20j) | N/A | Score+Confiance |
 | 4 | Cloud+Chikou seul | H4 | 2 464 L | **53.0%** (30H) | 46.4% | Aucun |
 | 5 | Cloud+Chikou seul | H4 | 2 464 L | **56.2%** (120H) | 41.0% | Aucun |
+| 6 | **Cloud+Chikou+MTF** | H1 | 405 L | **49.6%** (30H) | 46.4% | 64% rejetés |
 
 ### Scoring D1 — 44,664 signaux (25 symboles)
 
@@ -440,13 +442,26 @@ IchimokuSword/
 | LONG | 16 | **62.5%** | 100% |
 | SHORT | 8 | **75.0%** | 75% |
 
+### H1 vs H4 : descente de timeframe
+
+| Métrique | H4 + D1/W1 | H1 + H4/D1 | Delta |
+|:---------|:----------:|:----------:|:-----:|
+| Trades LONG | 1 259 | 405 | — |
+| LONG Win 30H | **54.4%** | **49.6%** | −4.8% ❌ |
+| LONG Win 60H | 55.1% | 47.9% | −7.2% |
+| LONG Win 120H | 56.2% | 43.2% | −13.0% |
+| SHORT Win 30H | 49.2% | 46.4% | −2.8% |
+
+**Verdict : H4 reste le timeframe optimal.** Descendre en H1 multiplie le bruit sans améliorer le signal.
+
 ### Conclusion
 
 1. **H4 > D1** systématiquement : l'edge double (57.8% vs 53.2%)
-2. **Longs uniquement** : les shorts perdent dans toutes les configurations
-3. **Meilleur compromis** : pipeline Cloud+Chikou+MTF = 54.4% LONG sur 1 259 trades filtrés (~3/semaine)
-4. **Scoring = scanner, Mécanique = trader** : le scoring capture plus d'opportunités, le pipeline mécanique est plus sélectif
-5. **57% avec money management** suffit pour être rentable à long terme
+2. **H4 > H1** : descendre en timeframe dégrade le win rate (−5% à −13%)
+3. **Longs uniquement** : les shorts perdent dans toutes les configurations
+4. **Meilleur compromis** : pipeline Cloud+Chikou+MTF H4 = 54.4% LONG sur 1 259 trades filtrés (~3/semaine)
+5. **Scoring = scanner, Mécanique = trader** : le scoring capture plus d'opportunités, le pipeline mécanique est plus sélectif
+6. **57% avec money management** suffit pour être rentable à long terme
 
 ---
 
