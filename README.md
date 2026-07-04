@@ -1,6 +1,6 @@
 # ⚔️ IchimokuSword
 
-**Scanner Ichimoku Kinko Hyo pour MetaTrader 5** — Analyse les 5 éléments de l'Ichimoku (Tenkan, Kijun, Senkou A/B, Chikou) sur tous les actifs disponibles avec détection avancée : SSB plates historiques, 3 règles d'or, twist, Lagging confirmation, rejets, lignes plates, **indice de confiance** et **backtesting intégré**.
+**Scanner Ichimoku Kinko Hyo pour MetaTrader 5** — Analyse les 5 éléments de l'Ichimoku (Tenkan, Kijun, Senkou A/B, Chikou) sur tous les actifs disponibles avec détection avancée : SSB plates historiques, 3 règles d'or, twist, Lagging confirmation, rejets, lignes plates, **indice de confiance**, **backtesting** et **pipeline mécanique multi-timeframe**.
 
 ---
 
@@ -12,6 +12,7 @@
 - [Analyse Ichimoku complète](#-analyse-ichimoku-complète)
 - [Indice de confiance](#-indice-de-confiance)
 - [Backtesting](#-backtesting)
+- [Pipeline Mécanique Cloud+Chikou](#-pipeline-mécanique-cloudchikou)
 - [Recommandation de trading](#-recommandation-de-trading)
 - [SSB plates historiques](#-ssb-plates-historiques)
 - [Les 3 règles d'or (Karen Péloille)](#-les-3-règles-dor-karen-péloille)
@@ -40,8 +41,9 @@
 - **Lagging confirmation** : Chikou franchit nuage + Kijun
 - **Lignes plates** : Kijun/Tenkan/Chikou horizontaux, nuage futur fin
 - **Rejets Kijun** : rebonds avec mèches
-- **Indice de confiance** : score 0-100 avec label (FAIBLE → ELEVÉE) basé sur 6 sous-scores
-- **Backtesting intégré** : validation du scoring sur l'historique (D1 et H4)
+- **Indice de confiance** : score 0-100 avec label (FAIBLE -> ELEVÉE) basé sur 6 sous-scores
+- **Backtesting scoring** : validation du scoring Ichimoku sur historique (D1 et H4) — 44k à 120k signaux
+- **Backtesting mécanique** : pipeline Cloud+Chikou+MTF purement mécanique — 1 676 trades filtrés
 - **Split Longs/Shorts** : analyse séparée des performances par direction
 - **Trade plan** : niveaux d'entrée, stop, TP, RR et position sizing
 - **Pénalité SHORT** : score réduit de 20% basé sur les résultats du backtest
@@ -105,10 +107,16 @@ Affiche le TOP 15 des actifs avec scoring complet, indice de confiance, verdict 
 ### Backtesting
 
 ```bash
-python backtest.py                          # Backtest D1 tous les actifs
-python backtest.py --timeframe H4           # Backtest H4
+# Backtest du scoring Ichimoku
+python backtest.py                          # D1 tous les actifs
+python backtest.py --timeframe H4           # H4
 python backtest.py --symbols EURUSD         # Un seul actif
 python backtest.py --max-bars 500           # Limiter l'historique
+
+# Backtest mécanique Cloud+Chikou (+ MTF)
+python backtest_cloud_cross.py              # D1, sans MTF
+python backtest_cloud_cross.py --timeframe H4 --mtf     # H4 + TP D1/W1 + filtre Chikou MTF
+python backtest_cloud_cross.py --tp-min-distance 0.5    # TP min 0.5%
 ```
 
 ### Infos compte
@@ -137,16 +145,16 @@ python main.py download XAUUSD --tf M3 --start 2026-06-20 --end 2026-06-27
 
 ### Nuage (Kumo)
 
-- **Au-dessus** → haussier
-- **En-dessous** → baissier
-- **Dans** → indécision
-- **Vert** (A > B) → support haussier
-- **Rouge** (B > A) → résistance baissière
+- **Au-dessus** -> haussier
+- **En-dessous** -> baissier
+- **Dans** -> indécision
+- **Vert** (A > B) -> support haussier
+- **Rouge** (B > A) -> résistance baissière
 
 ### TK Cross
 
-- **TK haussier** : Tenkan passe au-dessus du Kijun → achat
-- **TK baissier** : Tenkan passe en-dessous du Kijun → vente
+- **TK haussier** : Tenkan passe au-dessus du Kijun -> achat
+- **TK baissier** : Tenkan passe en-dessous du Kijun -> vente
 
 ### Chikou
 
@@ -192,47 +200,46 @@ Système de scoring multi-TF qui évalue la **fiabilité** du signal Ichimoku su
 
 ## 📊 Backtesting
 
-Le backtester valide le scoring Ichimoku sur l'historique réel pour mesurer objectivement l'edge.
+### Backtest du scoring (`backtest.py`)
 
-```bash
-python backtest.py                          # D1 (2000 barres max)
-python backtest.py --timeframe H4           # H4 (5000 barres max)
-python backtest.py --output reports         # Export JSON
-```
+Valide le scoring Ichimoku sur l'historique réel.
 
-### Méthodologie
-
-1. Pour chaque barre passée (à partir de la 53e), calcule le score Ichimoku **comme si on y était**
-2. Regarde ce qui s'est passé N barres plus tard (1, 3, 5, 10, 20 pour D1 / 6, 18, 30, 60, 120 pour H4)
-3. Un trade est **gagnant** si la direction prédite (above_kijun) correspond au mouvement réel
+**Méthodologie :**
+1. Pour chaque barre passée, calcule le score Ichimoku **comme si on y était**
+2. Regarde ce qui s'est passé N barres plus tard
+3. Trade gagnant si la direction prédite (above_kijun) correspond au mouvement réel
 4. Agrège par bracket de score et niveau de confiance
 
-### Résultats clés
+### Backtest mécanique (`backtest_cloud_cross.py`)
 
-| Configuration | Win rate | Trades analysés |
-|:--------------|:--------:|:---------------:|
-| **H4 Score 80-101** | **57.8%** 🏆 | ~ |
-| H4 Confiance ÉLEVÉE | **57.6%** | ~ |
-| D1 Score 80-101 | 53.2% | 4,021 |
-| D1 Confiance ÉLEVÉE | 53.4% | 15,613 |
-| **Total D1** | — | **44,664** |
-| **Total H4** | — | **120,675** |
+Valide des critères purement mécaniques (sans scoring) :
 
-> **Le scoring H4 est STRUCTURELLEMENT meilleur que le D1** : l'edge double (7.8% vs 3.2%) sur le bracket 80-101.
+```
+ENTRÉE LONG (H4) :
+  1. Cloud breakout frais : 2 barres au-dessus du nuage, la 3e pas
+  2. Chikou H4 > Tenkan/Kijun/SSB/Prix/Cloud à 26p H4
+  3. Chikou D1 > Tenkan/Kijun/SSB à 26p D1
+  4. Chikou W1 > Tenkan/Kijun/SSB à 26p W1
+  -> TP = 1er niveau D1/W1 bloquant > 0.3%
+```
 
-### Split Longs / Shorts
+63% des signaux sont filtrés par les vérifications Chikou D1/W1.
 
-Le backtest a révélé un **biais LONG majeur** :
+---
 
-| Bracket | Longs | Shorts | Différence |
-|:-------:|:-----:|:------:|:----------:|
-| 80-101 | **55%** | N/A | — |
-| 60-80 | **53.8%** | 44.3% | +9.5% |
-| 0-20 | 68.5%* | 46.8% | +21.7% |
+## 🏗️ Pipeline Mécanique Cloud+Chikou
 
-\* *Petit échantillon (184 trades)*
+Le pipeline le plus efficace identifié par le backtesting :
 
-**Conséquence directe** : le scoring applique une pénalité de -20% aux signaux SHORT dans `recommend_trade.py`, et le verdict par défaut est "SKIP" pour les shorts.
+| Étape | Condition | Timeframe |
+|:-----:|:----------|:---------:|
+| **1** | Cloud breakout frais | H4 |
+| **2** | Chikou > Tenkan/Kijun/SSB/Prix/Cloud à 26p | H4 |
+| **3** | Chikou > Tenkan/Kijun/SSB à 26p | D1 |
+| **4** | Chikou > Tenkan/Kijun/SSB à 26p | W1 |
+| **TP** | Niveau bloquant D1/W1 le plus proche | D1+W1 |
+
+**Chaque timeframe valide sa PROPRE Chikou contre ses PROPRES niveaux** — pas de comparaison cross-TF qui serait incohérente (les niveaux D1 d'il y a 26 jours n'ont pas d'échelle commune avec le close H4 actuel).
 
 ---
 
@@ -259,7 +266,7 @@ python recommend_trade.py
 | **Rejets** | ~20 | Rejets avec mèche |
 | **Liquidité** | 5 | Majeur > indices > crosses |
 
-### Nouveautés (v2)
+### Nouveautés
 
 | Fonctionnalité | Description |
 |:---------------|:------------|
@@ -307,30 +314,9 @@ Symbole    TF   ... Lignes
 AUDCAD     H4   ... SSBx3 R:0.985516 S:0.984855
 ```
 
-- `SSBx3` = 3 niveaux SSB plats détectés
-- `R:0.985516` = résistance la plus proche
-- `S:0.984855` = support le plus proche
-
-### Détail complet
-
-```text
-  SSB PLATES HISTORIQUES (supports/resistances)
-  10 niveaux detectes
-  Resistance la plus proche : 0.985516
-  Support le plus proche    : 0.984855
-
-  Niveau         Bars   Dist%    Position     Age
-  ------------------------------------------------
-  0.985516       28     0.048%   v AU-DESSUS   6
-  0.984537       12     0.051%   ^ EN-DESSOUS  49
-  0.984855       10     0.019%   ^ EN-DESSOUS  88
-```
-
 ---
 
 ## 🏆 Les 3 règles d'or (Karen Péloille)
-
-Méthode structurée pour valider un signal Ichimoku :
 
 | Règle | Condition | Détail |
 |:-----:|-----------|--------|
@@ -338,31 +324,18 @@ Méthode structurée pour valider un signal Ichimoku :
 | **2** | Chikou aligné | Chikou > prix 26p ET prix > Kijun |
 | **3** | TK Cross dans la direction | Croisement Tenkan/Kijun haussier ou baissier |
 
-- **3/3** → signal fort ✅
-- **2/3** → signal modéré ⚠️
-- **0-1/3** → pas de signal ❌
-
 ---
 
 ## 🔄 Twist (croisement Senkou A/B)
 
-Le **twist** est le moment où Senkou A croise Senkou B, faisant changer la couleur du nuage. C'est une zone de **retournement potentiel**.
-
-- **ROUGE → VERT** : twist haussier (le nuage passe en support)
-- **VERT → ROUGE** : twist baissier (le nuage passe en résistance)
-- Détection du nombre de bougies depuis le dernier twist
+- **ROUGE -> VERT** : twist haussier (le nuage passe en support)
+- **VERT -> ROUGE** : twist baissier (le nuage passe en résistance)
 
 ---
 
 ## ✅ Confirmation Lagging Span
 
-Le Chikou (close actuel projeté 26 périodes en arrière) doit franchir **le nuage ET la Kijun** pour confirmer la puissance du mouvement.
-
-- **Chikou > K26** : au-dessus de la Kijun passée
-- **Chikou > nuage passé** : franchissement du nuage
-- **Franchit Kijun** : cassure récente de la Kijun
-- **Franchit nuage** : cassure récente du nuage
-- **Confirmé** : les 3 conditions réunies
+Le Chikou doit franchir le nuage ET la Kijun pour confirmer la puissance du mouvement.
 
 ---
 
@@ -370,25 +343,10 @@ Le Chikou (close actuel projeté 26 périodes en arrière) doit franchir **le nu
 
 | Type | Élément | Signification |
 |------|---------|---------------|
-| **📜 Passée** | Chikou (décalé -26) | Range passé |
-| **🔮 Future** | Senkou A/B (projeté +26) | Consolidation à venir |
-| **📏 Actuelle** | Kijun horizontal | Range en cours |
-| **📏 Actuelle** | Tenkan horizontal | Consolidation court terme |
-| **📐 Nuage fin** | < 0.1% épaisseur | Support/résistance faible |
-
----
-
-## ⚡ Détection des rejets
-
-Le prix s'approche du Kijun puis rebondit :
-
-| Type | Description |
-|------|-------------|
-| **Rejet haussier** | Prix sous → au-dessus (support) |
-| **Rejet haussier (mèche)** | Mèche basse confirmant |
-| **Rejet baissier** | Prix au-dessus → en-dessous (résistance) |
-| **Rejet baissier (mèche)** | Mèche haute confirmant |
-| **Éloignement** | Prix s'éloigne du Kijun |
+| **Passée** | Chikou (décalé -26) | Range passé |
+| **Future** | Senkou A/B (projeté +26) | Consolidation à venir |
+| **Actuelle** | Kijun horizontal | Range en cours |
+| **Nuage fin** | < 0.1% épaisseur | Support/résistance faible |
 
 ---
 
@@ -406,7 +364,8 @@ IchimokuSword/
 │   └── display.py           # Affichage console coloré (incl. confiance)
 ├── main.py                  # CLI (snapshot, watch, info, download)
 ├── recommend_trade.py       # Scoring, confiance, backtest estimate, trade plan
-├── backtest.py              # Backtesting D1/H4 avec rapports et analyse long/short
+├── backtest.py              # Backtesting scoring D1/H4 (44k-120k signaux)
+├── backtest_cloud_cross.py  # Backtesting mécanique Cloud+Chikou+MTF (1 676 trades)
 ├── .env.example
 ├── requirements.txt
 └── README.md
@@ -421,51 +380,73 @@ IchimokuSword/
 | Alias | Constante MT5 |
 |-------|:-------------:|
 | M1 | 1 |
-| M5 | 5 |
-| M15 | 15 |
-| M30 | 30 |
 | H1 | 16385 |
 | H4 | 16388 |
 | D1 | 16408 |
 | W1 | 32769 |
 
-### Variables d'environnement
-
-| Variable | Description |
-|----------|-------------|
-| `MT5_PATH` | Chemin vers terminal64.exe |
-| `MT5_LOGIN` | Numéro de compte (optionnel) |
-| `MT5_PASSWORD` | Mot de passe (optionnel) |
-| `MT5_SERVER` | Serveur MT5 (optionnel) |
-| `ICHIMOKU_WATCHLIST` | Symboles à surveiller (csv) |
-
 ---
 
 ## 📊 Résultats du Backtest
 
-### D1 — 44,664 signaux (25 symboles)
+### Tableau comparatif complet
+
+| # | Stratégie | TF | Trades | LONG Win | SHORT Win | Filtrage |
+|:-:|:----------|:--:|:------:|:--------:|:---------:|:--------:|
+| 1 | **Scoring 80-101** | H4 | 40 000+ | **57.8%** (120H) | N/A | Score+Confiance |
+| 2 | **Cloud+Chikou+MTF** | H4 | 1 259 L | **54.4%** (30H) | 49.2% | 63% rejetés |
+| 3 | Scoring 80-101 | D1 | 4 021 | **53.2%** (20j) | N/A | Score+Confiance |
+| 4 | Cloud+Chikou seul | H4 | 2 464 L | **53.0%** (30H) | 46.4% | Aucun |
+| 5 | Cloud+Chikou seul | H4 | 2 464 L | **56.2%** (120H) | 41.0% | Aucun |
+
+### Scoring D1 — 44,664 signaux (25 symboles)
 
 | Bracket | Win 20j | Trades | Verdict |
 |:-------:|:-------:|:------:|:-------:|
-| 0-20 | 43.8% | 2,652 | ❌ À éviter |
-| 20-40 | 49.8% | 11,923 | ⚠️ |
-| 40-60 | 47.8% | 14,623 | ⚠️ |
-| 60-80 | 48.3% | 11,445 | ⚠️ |
-| **80-101** | **53.2%** | 4,021 | ✅ **Edge +3.2%** |
+| 0-20 | 43.8% | 2,652 | A éviter |
+| 20-40 | 49.8% | 11,923 | Neutre |
+| 40-60 | 47.8% | 14,623 | Sous-performe |
+| 60-80 | 48.3% | 11,445 | Stable |
+| **80-101** | **53.2%** | 4,021 | Edge +3.2% |
 
-### H4 — 120,675 signaux (25 symboles)
+### Scoring H4 — 120,675 signaux (25 symboles)
 
 | Bracket | Win 120H | Verdict |
 |:-------:|:--------:|:-------:|
-| **80-101** | **57.8%** 🏆 | ✅ **Edge +7.8%** |
-| 0-20 | ~44% | ❌ À éviter |
+| **80-101** | **57.8%** | Edge +7.8% |
+| 0-20 | ~44% | A éviter |
+
+### Split LONGS vs SHORTS (H4)
+
+| Bracket | Longs WR | Shorts WR | Diff |
+|:-------:|:--------:|:---------:|:----:|
+| 80-101 | **54.6%** | N/A | — |
+| 0-20 | 68.5%* | 46.8% | +21.7% |
+
+*Petit échantillon (184 trades)
+
+### Cloud+Chikou+MTF — 1,676 trades filtrés (25 symboles)
+
+| Direction | Trades | Win 30H | Win 120H |
+|:---------:|:------:|:-------:|:--------:|
+| **LONG** | 1 259 | **54.4%** | **56.2%** |
+| SHORT | 417 | 49.2% | 41.0% |
+| **Skippés** | 2 862 | — | 63% filtrés |
+
+### TP D1/W1 (sur trades filtrés)
+
+| Direction | Trades TP | Win 30H | TP touché |
+|:---------:|:---------:|:-------:|:---------:|
+| LONG | 16 | **62.5%** | 100% |
+| SHORT | 8 | **75.0%** | 75% |
 
 ### Conclusion
 
-- **H4 > D1** pour la qualité de signal (57.8% vs 53.2%)
-- **Longs uniquement** : le scoring ne fonctionne pas pour les shorts (< 50%)
-- **Filtre optimal** : Score > 80 + Confiance ÉLEVÉE + LONG + H4 → ~57% win rate
-- **57% avec money management** suffit pour être rentable à long terme
+1. **H4 > D1** systématiquement : l'edge double (57.8% vs 53.2%)
+2. **Longs uniquement** : les shorts perdent dans toutes les configurations
+3. **Meilleur compromis** : pipeline Cloud+Chikou+MTF = 54.4% LONG sur 1 259 trades filtrés (~3/semaine)
+4. **Scoring = scanner, Mécanique = trader** : le scoring capture plus d'opportunités, le pipeline mécanique est plus sélectif
+5. **57% avec money management** suffit pour être rentable à long terme
 
 ---
 
