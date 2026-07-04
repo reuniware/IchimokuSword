@@ -21,6 +21,11 @@ venv/
 .DS_Store
 Thumbs.db
 
+# Windows reserved device names (cannot be indexed by git)
+nul
+K
+TK
+
 # Projet - donnees generees
 reports/
 *.json

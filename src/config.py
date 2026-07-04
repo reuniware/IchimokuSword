@@ -75,8 +75,9 @@ DEFAULT_WATCHLIST = [
     "EURUSD", "GBPUSD", "USDJPY", "USDCAD", "AUDUSD", "NZDUSD", "USDCHF",
     "EURJPY", "GBPJPY", "EURGBP",
     "XAUUSD", "XAGUSD",
-    "BTCUSD", "ETHUSD",
-    "US30", "SP500", "NAS100", "GER40", "UK100",
+    "US30.cash", "US100.cash", "US500.cash",
+    "GER40.cash", "UK100.cash", "FRA40.cash",
+    "AUS200.cash", "N25.cash", "HK50.cash",
     "WTI", "BRENT",
 ]
 

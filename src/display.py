@@ -9,7 +9,8 @@ from typing import List, Optional
 from src.config import TIMEFRAME_LABELS
 from src.ichimoku import (IchimokuResult, IchimokuCloud, IchimokuTKCross,
     IchimokuChikou, IchimokuFlatLines, IchimokuThreeRules,
-    IchimokuTwist, IchimokuLaggingConfirmation)
+    IchimokuTwist, IchimokuLaggingConfirmation,
+    IchimokuConfidence, compute_single_tf_confidence)
 
 # ---------------------------------------------------------------------------
 # Codes ANSI pour les couleurs
@@ -163,6 +164,19 @@ def _twist_str(twist: Optional['IchimokuTwist']) -> str:
     return ""
 
 
+def _confidence_str(conf: Optional['IchimokuConfidence']) -> str:
+    """Affichage de l'indice de confiance."""
+    if not conf:
+        return f"{DIM}N/A{RESET}"
+    if conf.label == "ELEVEE":
+        return f"{GREEN}{conf.score}/100 {BOLD}ELEVEE{RESET}"
+    if conf.label == "MOYENNE":
+        return f"{YELLOW}{conf.score}/100 MOYENNE{RESET}"
+    if conf.label == "PRUDENCE":
+        return f"{CYAN}{conf.score}/100 PRUDENCE{RESET}"
+    return f"{RED}{conf.score}/100 FAIBLE{RESET}"
+
+
 def _lagging_str(lag: Optional['IchimokuLaggingConfirmation']) -> str:
     """Affichage de la confirmation Lagging Span."""
     if not lag:
@@ -213,8 +227,9 @@ def print_kijun_results(results: List[IchimokuResult],
 
     # En-tete
     print(f"{BOLD}{'Symbole':<10} {'TF':<4} {'Prix':<11} {'Kijun':<11} "
-          f"{'Dist%':<7} {'Kumo':<12} {'TK':<10} {'Chikou':<12} {'Lignes':<18}{RESET}")
-    print(f"{DIM}{'-'*88}{RESET}")
+          f"{'Dist%':<7} {'Kumo':<12} {'TK':<10} {'Chikou':<12} "
+          f"{'Conf.':<14} {'Lignes':<18}{RESET}")
+    print(f"{DIM}{'-'*104}{RESET}")
 
     for r in results:
         color = _proximity_color(r.distance_pct)
@@ -249,11 +264,15 @@ def print_kijun_results(results: List[IchimokuResult],
         # Lagging confirmation
         lag_str = _lagging_str(r.lagging_confirmation)
 
+        # Confiance
+        conf = compute_single_tf_confidence(r)
+        conf_str = _confidence_str(conf)
+
         all_extra = " ".join(filter(None, [twist_str, lag_str, flat_str]))
         print(f"{r.symbol:<10} {r.timeframe_label:<4} "
               f"{format_px(r.current_price):<11} "
               f"{format_px(r.kijun_sen):<11} "
-              f"{dist_str:<14} {cloud_str:<12} {tk_str:<10} {chikou_str:<22} {rules_str:<10} {all_extra}")
+              f"{dist_str:<14} {cloud_str:<12} {tk_str:<10} {chikou_str:<22} {conf_str:<14} {rules_str:<10} {all_extra}")
 
     # Resume
     print(f"{DIM}{'-'*88}{RESET}")
@@ -366,6 +385,17 @@ def print_detailed_result(r: IchimokuResult) -> None:
                 print(f"  {lvl.level:<14.6f} {lvl.bars_count:<6} "
                       f"{dist_color}{lvl.price_distance_pct:<7.3f}%{RESET} "
                       f"{arrow} {lvl.position:<10} {lvl.age_bars:<6}")
+    # Confiance
+    conf = compute_single_tf_confidence(r)
+    print(f"  {'='*45}")
+    print(f"  {BOLD}INDICE DE CONFIANCE{RESET}")
+    print(f"  {'='*45}")
+    print(f"  Score             : {_confidence_str(conf)}")
+    print(f"  Kumo position     : {conf.details.get('kumo', 0):<3}/25")
+    print(f"  Chikou alignement : {conf.details.get('chikou', 0):<3}/20")
+    print(f"  3 Regles d'or     : {conf.details.get('rules', 0):<3}/25")
+    print(f"  Stabilite Kijun   : {conf.details.get('kijun', 0):<3}/15")
+    print(f"  Lagging conf.     : {conf.details.get('lagging', 0):<3}/15")
     print(f"  Bougies analysees  : {r.bars_count}")
     print()
 

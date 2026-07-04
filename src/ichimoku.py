@@ -140,6 +140,319 @@ class IchimokuLaggingConfirmation:
 
 
 @dataclass
+class IchimokuConfidence:
+    """Indice de confiance/fiabilite du signal Ichimoku.
+
+    Combine plusieurs facteurs pour evaluer la qualite du signal :
+    - Alignment multi-timeframe (poids fort)
+    - Qualite du nuage (epaisseur, position)
+    - Regles d'or validees
+    - Stabilite du Kijun
+    - SSB supports/resistances
+    - Confirmation Lagging
+    """
+    score: int                    # Score 0-100
+    label: str                    # "FAIBLE", "PRUDENCE", "MOYENNE", "ELEVEE"
+    details: Dict[str, int]       # Sous-scores detailles
+    # Composants
+    tf_alignment_score: int       # 0-30
+    kumo_quality_score: int       # 0-20
+    rules_score: int              # 0-20
+    chikou_reliability: int       # 0-10
+    ssb_support_score: int        # 0-10
+    kijun_stability: int          # 0-10
+
+
+def compute_confidence(tf_data: Dict[str, dict],
+                        nb_haut: int, nb_bas: int) -> IchimokuConfidence:
+    """Calcule l'indice de confiance global d'une recommandation.
+
+    Analyse la coherence multi-timeframe et la qualite des signaux
+    pour produire un score 0-100 et un label.
+
+    Args:
+        tf_data: Dict {TF_label: dict_ichimoku} avec les cles:
+            above, cloud, chikou, three_rules, flat, lagging, twist
+        nb_haut: Nombre de TFs haussiers (above=True)
+        nb_bas: Nombre de TFs baissiers
+
+    Retourne:
+        IchimokuConfidence avec score et details.
+    """
+    details = {}
+    total_tfs = len([t for t in tf_data.values() if t])
+    if total_tfs == 0:
+        return IchimokuConfidence(score=0, label="N/A", details={},
+                                   tf_alignment_score=0, kumo_quality_score=0,
+                                   rules_score=0, chikou_reliability=0,
+                                   ssb_support_score=0, kijun_stability=0)
+
+    # --- 1. Alignment multi-timeframe (0-30) ---
+    direction = "HAUSSIER" if nb_haut > nb_bas else "BAISSIER"
+    aligned = max(nb_haut, nb_bas)
+    if aligned == total_tfs:
+        tf_alignment = 30
+    elif aligned >= total_tfs - 1:
+        tf_alignment = 22
+    elif aligned >= total_tfs / 2:
+        tf_alignment = 12
+    else:
+        tf_alignment = 5
+
+    # Bonus si D1 et W1 aligns avec la direction
+    for tf_name in ["D1", "W1"]:
+        d = tf_data.get(tf_name)
+        if d:
+            above_tf = d.get("above", False)
+            if (direction == "HAUSSIER" and above_tf) or (direction == "BAISSIER" and not above_tf):
+                tf_alignment += 4
+
+    tf_alignment = min(tf_alignment, 30)
+    details["tf_alignment"] = tf_alignment
+
+    # --- 2. Qualite du nuage (0-20) ---
+    kumo_scores = []
+    for tf_name, d in tf_data.items():
+        if not d or not d.get("cloud"):
+            continue
+        cloud = d["cloud"]
+        above = d["above"]
+        is_inside = cloud.get("inside", False)
+        is_above = cloud.get("above", False)
+        is_below = cloud.get("below", False)
+        color = cloud.get("color", "")
+        
+        if is_inside:
+            kumo_scores.append(2)
+        elif (is_above and color == "VERT" and above) or (is_below and color == "ROUGE" and not above):
+            kumo_scores.append(10)
+        elif (is_above and above) or (is_below and not above):
+            kumo_scores.append(7)
+        elif (is_above and not above):
+            kumo_scores.append(3)
+        else:
+            kumo_scores.append(3)
+    
+    if kumo_scores:
+        kumo_quality = int(sum(kumo_scores) / len(kumo_scores) * 2)
+    else:
+        kumo_quality = 0
+    kumo_quality = min(kumo_quality, 20)
+    details["kumo_quality"] = kumo_quality
+
+    # --- 3. Regles d'or validees (0-20) ---
+    rules_validations = []
+    for d in tf_data.values():
+        if not d or not d.get("three_rules"):
+            continue
+        rules_validations.append(d["three_rules"].get("validated", 0))
+    
+    if rules_validations:
+        avg_rules = sum(rules_validations) / len(rules_validations)
+        rules_score = int(avg_rules / 3.0 * 20)
+    else:
+        rules_score = 0
+    details["rules_score"] = rules_score
+
+    # --- 4. Fiabilite du Chikou (0-10) ---
+    chikou_ok = sum(1 for d in tf_data.values()
+                    if d and d.get("chikou") and d["chikou"].get("aligned", False))
+    if chikou_ok == total_tfs:
+        chikou_rel = 10
+    elif chikou_ok >= total_tfs - 1:
+        chikou_rel = 7
+    elif chikou_ok >= total_tfs / 2:
+        chikou_rel = 4
+    elif chikou_ok > 0:
+        chikou_rel = 2
+    else:
+        chikou_rel = 0
+    details["chikou_reliability"] = chikou_rel
+
+    # --- 5. Support SSB (0-10) ---
+    ssb_scores = []
+    for d in tf_data.values():
+        if not d or not d.get("flat") or not d["flat"].get("ssb_history"):
+            ssb_scores.append(5)  # Neutre: pas de SSB = pas de penalite
+            continue
+        sh = d["flat"]["ssb_history"]
+        penalty = 0
+        bonus = 0
+        for lvl in sh.get("levels", []):
+            if lvl["position"] == "AU-DESSUS" and lvl["price_distance_pct"] < 1.0:
+                penalty += 2  # Resistance proche
+            elif lvl["position"] == "EN-DESSOUS" and lvl["price_distance_pct"] < 1.0:
+                bonus += 3  # Support proche
+        # Plus il y a de niveaux, plus la zone est technique = fiable
+        level_bonus = min(len(sh.get("levels", [])) * 2, 6)
+        ssb_scores.append(max(0, min(10, 5 + bonus - penalty + level_bonus)))
+    
+    if ssb_scores:
+        ssb_support = int(sum(ssb_scores) / len(ssb_scores))
+    else:
+        ssb_support = 5
+    ssb_support = min(ssb_support, 10)
+    details["ssb_support"] = ssb_support
+
+    # --- 6. Stabilite Kijun (0-10) ---
+    kijun_scores = []
+    for tf_name, d in tf_data.items():
+        if not d or not d.get("flat"):
+            continue
+        flat = d["flat"]
+        kijun_flat = flat.get("kijun_flat", False)
+        if tf_name in ["D1", "W1"] and not kijun_flat:
+            kijun_scores.append(6)  # Tendance claire sur long terme
+        elif not kijun_flat:
+            kijun_scores.append(4)  # Kijun qui bouge = tendance
+        else:
+            kijun_scores.append(1)  # Kijun plat = range
+    
+    if kijun_scores:
+        kijun_stab = int(sum(kijun_scores) / len(kijun_scores) * 2.5)
+    else:
+        kijun_stab = 5
+    kijun_stab = min(kijun_stab, 10)
+    details["kijun_stability"] = kijun_stab
+
+    # --- Score total ---
+    total = tf_alignment + kumo_quality + rules_score + chikou_rel + ssb_support + kijun_stab
+    total = min(total, 100)
+
+    # Label
+    if total >= 80:
+        label = "ELEVEE"
+    elif total >= 60:
+        label = "MOYENNE"
+    elif total >= 40:
+        label = "PRUDENCE"
+    else:
+        label = "FAIBLE"
+
+    return IchimokuConfidence(
+        score=total,
+        label=label,
+        details=details,
+        tf_alignment_score=tf_alignment,
+        kumo_quality_score=kumo_quality,
+        rules_score=rules_score,
+        chikou_reliability=chikou_rel,
+        ssb_support_score=ssb_support,
+        kijun_stability=kijun_stab,
+    )
+
+
+def compute_single_tf_confidence(result: 'IchimokuResult') -> IchimokuConfidence:
+    """Calcule l'indice de confiance pour un seul timeframe.
+
+    Utile pour l'affichage dans le tableau de scan (display.py).
+    Evalue la qualite du signal sur un timeframe isole.
+    """
+    details = {}
+    score = 0
+
+    # --- 1. Kumo position (0-25) ---
+    if result.cloud:
+        if result.cloud.above_cloud:
+            if result.above_kijun:
+                color_ok = result.cloud.cloud_color == "VERT"
+            else:
+                color_ok = result.cloud.cloud_color == "ROUGE"
+            kumo = 22 if color_ok else 16
+        elif result.cloud.below_cloud:
+            if not result.above_kijun:
+                color_ok = result.cloud.cloud_color == "ROUGE"
+            else:
+                color_ok = result.cloud.cloud_color == "VERT"
+            kumo = 22 if color_ok else 16
+        elif result.cloud.inside_cloud:
+            kumo = 6
+        else:
+            kumo = 0
+    else:
+        kumo = 0
+    details["kumo"] = kumo
+    score += kumo
+
+    # --- 2. Chikou alignment (0-20) ---
+    if result.chikou:
+        if result.chikou.bullish_alignment:
+            chikou_score = 20
+        elif result.chikou.above_price_26:
+            chikou_score = 10
+        else:
+            chikou_score = 3
+    else:
+        chikou_score = 0
+    details["chikou"] = chikou_score
+    score += chikou_score
+
+    # --- 3. 3 Rules d'or (0-25) ---
+    if result.three_rules:
+        v = result.three_rules.rules_validated
+        if v == 3:
+            rules = 25
+        elif v >= 2:
+            rules = 15
+        elif v >= 1:
+            rules = 7
+        else:
+            rules = 0
+    else:
+        rules = 0
+    details["rules"] = rules
+    score += rules
+
+    # --- 4. Kijun stability (0-15) ---
+    if result.flat:
+        if not result.flat.kijun_flat:
+            kijun = 15
+        elif result.flat.kijun_flat_bars < 10:
+            kijun = 8
+        else:
+            kijun = 3
+    else:
+        kijun = 5
+    details["kijun"] = kijun
+    score += kijun
+
+    # --- 5. Lagging confirmation (0-15) ---
+    if result.lagging_confirmation:
+        if result.lagging_confirmation.power_confirmed:
+            lag = 15
+        elif result.lagging_confirmation.chikou_françit_nuage or result.lagging_confirmation.chikou_françit_kijun:
+            lag = 8
+        else:
+            lag = 3
+    else:
+        lag = 0
+    details["lagging"] = lag
+    score += lag
+
+    # Label
+    if score >= 80:
+        label = "ELEVEE"
+    elif score >= 60:
+        label = "MOYENNE"
+    elif score >= 40:
+        label = "PRUDENCE"
+    else:
+        label = "FAIBLE"
+
+    return IchimokuConfidence(
+        score=score,
+        label=label,
+        details=details,
+        tf_alignment_score=kumo,
+        kumo_quality_score=kumo,
+        rules_score=rules,
+        chikou_reliability=chikou_score,
+        ssb_support_score=0,
+        kijun_stability=kijun,
+    )
+
+
+@dataclass
 class IchimokuResult:
     """Resultat complet du calcul Ichimoku pour un symbole/timeframe."""
     symbol: str

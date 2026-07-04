@@ -12,8 +12,14 @@ from datetime import datetime, timezone
 import numpy as np
 from dataclasses import asdict
 
-# Importer la detection SSB depuis le module central
-from src.ichimoku import detect_ssb_flat_levels
+# Importer la detection SSB et la confiance depuis le module central
+from src.ichimoku import detect_ssb_flat_levels, compute_confidence
+
+# Backtest H4: win rate par bracket de score et confiance (LONG only)
+BACKTEST_WIN_RATES = {
+    "score": {0: 44.0, 20: 47.3, 40: 46.6, 60: 44.3, 80: 57.6},
+    "confiance": {"FAIBLE": 49.6, "PRUDENCE": 49.3, "MOYENNE": 44.3, "ELEVEE": 57.6},
+}
 
 TIMEFRAMES = {"H1": mt5.TIMEFRAME_H1, "H4": mt5.TIMEFRAME_H4,
               "D1": mt5.TIMEFRAME_D1, "W1": mt5.TIMEFRAME_W1}
@@ -38,9 +44,9 @@ CATEGORIES = {
         "USDZAR", "USDMXN",
     ],
     "INDICES": [
-        "US30", "SP500", "NAS100", "US100.cash", "US500.cash", "US30.cash",
-        "GER40", "UK100", "FRA40", "JPN225", "AUS200.cash",
-        "N25.cash", "HK50",
+        "US30.cash", "US100.cash", "US500.cash",
+        "GER40.cash", "UK100.cash", "FRA40.cash",
+        "AUS200.cash", "N25.cash", "HK50.cash",
     ],
 }
 
@@ -302,6 +308,103 @@ def compute_lagging_recommend(closes, senkou_a, senkou_b, above_kijun):
     return None
 
 
+def get_backtest_estimate(score: float, conf_label: str, direction: str) -> dict:
+    """Estime le win rate attendu d'apres le backtest.
+
+    Retourne le win rate estime et un verdict TRADE/SKIP.
+    """
+    # Trouver le bracket de score
+    score_brackets = sorted(BACKTEST_WIN_RATES["score"].keys())
+    bracket_wr = 50.0
+    for i, lo in enumerate(score_brackets):
+        if i + 1 < len(score_brackets):
+            hi = score_brackets[i + 1]
+            if lo <= score < hi:
+                bracket_wr = BACKTEST_WIN_RATES["score"][lo]
+                break
+    if score >= score_brackets[-1]:
+        bracket_wr = BACKTEST_WIN_RATES["score"][score_brackets[-1]]
+
+    conf_wr = BACKTEST_WIN_RATES["confiance"].get(conf_label, 50.0)
+    estimated_wr = (bracket_wr + conf_wr) / 2.0
+
+    # Penalite SHORT (backtest: les shorts perdent < 50% partout)
+    if direction == "BAISSIER":
+        estimated_wr -= 10.0
+
+    # Verdict
+    if direction == "BAISSIER":
+        verdict = "SKIP"
+        reason = "Les SHORTS sont perdants en backtest (< 50%)"
+    elif score < 40:
+        verdict = "SKIP"
+        reason = "Score < 40 = win rate < 48%"
+    elif estimated_wr < 50:
+        verdict = "PRUDENCE"
+        reason = f"Win rate estime < 50% ({estimated_wr:.1f}%)"
+    elif score >= 80 and conf_label == "ELEVEE" and estimated_wr >= 55:
+        verdict = "TRADE"
+        reason = f"Configuration optimale: score={score:.0f}, {conf_label}, ~{estimated_wr:.0f}%"
+    elif score >= 60 and conf_label in ("ELEVEE", "MOYENNE"):
+        verdict = "TRADE"
+        reason = f"Bon signal: score={score:.0f}, {conf_label}, ~{estimated_wr:.0f}%"
+    else:
+        verdict = "PRUDENCE"
+        reason = f"Signal mitige ({estimated_wr:.1f}% estime)"
+
+    return {"win_rate": round(estimated_wr, 1), "verdict": verdict, "reason": reason}
+
+
+def compute_trade_plan(d: dict, direction: str) -> dict:
+    """Calcule les niveaux d'entree, stop, TP et RR."""
+    price = d["close"]
+    kijun = d["kijun"]
+    tenkan = d["tenkan"]
+    sa = d.get("senkou_a", 0)
+    sb = d.get("senkou_b", 0)
+    cloud_top = max(sa, sb) if sa and sb else price * 1.01
+    cloud_bot = min(sa, sb) if sa and sb else price * 0.99
+
+    if direction == "HAUSSIER":
+        entry = price  # Market order
+        stop = min(kijun, cloud_bot) if kijun else price * 0.99
+        # TP = cloud superieur ou Tenkan + 2*ATR approx
+        tp = max(cloud_top, tenkan * 1.02) if tenkan else price * 1.01
+    else:
+        entry = price
+        stop = max(kijun, cloud_top) if kijun else price * 1.01
+        tp = min(cloud_bot, tenkan * 0.98) if tenkan else price * 0.99
+
+    risk = abs(entry - stop)
+    reward = abs(tp - entry)
+    rr = reward / risk if risk > 0 else 0
+
+    return {
+        "entry": round(entry, 5),
+        "stop": round(stop, 5),
+        "tp": round(tp, 5),
+        "risk_pct": round(risk / entry * 100, 3) if entry > 0 else 0,
+        "reward_pct": round(reward / entry * 100, 3) if entry > 0 else 0,
+        "rr": round(rr, 2),
+    }
+
+
+def compute_position_size(account_balance: float, risk_per_trade: float,
+                           entry: float, stop: float) -> dict:
+    """Calcule la taille de position pour un risque donne."""
+    risk_amount = account_balance * risk_per_trade / 100.0
+    stop_distance = abs(entry - stop)
+    if stop_distance == 0:
+        return {"units": 0, "risk_amount": risk_amount, "risk_pct": risk_per_trade}
+    units = risk_amount / stop_distance
+    return {
+        "units": round(units, 2),
+        "risk_amount": round(risk_amount, 2),
+        "risk_pct": risk_per_trade,
+        "notional": round(units * entry, 2),
+    }
+
+
 def compute_ichimoku_data(highs, lows, closes, opens, n, price):
     """Calcule tous les elements Ichimoku pour le scoring."""
     k = kijun(highs, lows, n - 1, 26)
@@ -350,7 +453,19 @@ def main():
         return
 
     now = datetime.now(timezone.utc)
+    # Construire un dictionnaire des symboles disponibles
+    # Inclut les alias .cash pour les indices
     all_symbols = {s.name: s for s in mt5.symbols_get()}
+    
+    # Ajouter automatiquement les alias sans .cash -> avec .cash
+    # et vice-versa, pour etre compatible avec differents brokers
+    cash_aliases = {}
+    for sym in all_symbols:
+        if sym.endswith('.cash'):
+            cash_aliases[sym.replace('.cash', '')] = sym
+        else:
+            cash_aliases[f'{sym}.cash'] = sym
+    all_symbols.update(cash_aliases)
 
     print("=" * 130)
     print("  RECHERCHE DU MEILLEUR ACTIF A TRADER AUJOURD'HUI")
@@ -363,12 +478,16 @@ def main():
         for sym in cat_symbols:
             if sym not in all_symbols:
                 continue
-            mt5.symbol_select(sym, True)
+            # Resoudre l'alias (.cash) : si le symbole est un alias string,
+            # utiliser le vrai nom MT5 pour les appels API
+            resolved = all_symbols[sym]
+            mt5_name = resolved.name if hasattr(resolved, 'name') else resolved
+            mt5.symbol_select(mt5_name, True)
 
             tf_data = {}
             has_data = 0
             for tf_label, tf_val in TIMEFRAMES.items():
-                r = mt5.copy_rates_from_pos(sym, tf_val, 0, NB[tf_label])
+                r = mt5.copy_rates_from_pos(mt5_name, tf_val, 0, NB[tf_label])
                 if r is None or len(r) < 26:
                     tf_data[tf_label] = None
                     continue
@@ -536,6 +655,25 @@ def main():
     direction = "HAUSSIER" if nb_haut > nb_bas else "BAISSIER"
     dir_align = f"{nb_haut}/{nb_bas}"
 
+    # Confiance
+    conf = compute_confidence(tf_data, nb_haut, nb_bas)
+
+    # Backtest estimate et verdict
+    bt_estimate = get_backtest_estimate(total, conf.label, direction)
+
+    # Penalite SHORT sur le score (backtest: shorts perdants)
+    if direction == "BAISSIER":
+        total *= 0.8  # -20% de score pour les shorts
+
+    # Trade plan H4
+    h4_data = tf_data.get("H4", {})
+    trade_plan = compute_trade_plan(h4_data, direction) if h4_data else {}
+
+    # Position sizing (compte fictif 10k, risque 1%)
+    sizing = {}
+    if trade_plan.get("entry") and trade_plan.get("stop"):
+        sizing = compute_position_size(10000, 1.0, trade_plan["entry"], trade_plan["stop"])
+
     all_scores.append({
         "sym": sym, "cat": cat_name,
         "total": total,
@@ -551,15 +689,22 @@ def main():
         "liq": liq,
         "direction": direction, "dir_detail": dir_align,
         "tf_data": tf_data,
+        "conf": conf,
+        "bt_estimate": bt_estimate,
+        "trade_plan": trade_plan,
+        "sizing": sizing,
     })
 
     all_scores.sort(key=lambda x: -x["total"])
 
     # --- AFFICHAGE TOP 10 ---
-    print(f"\n  {'':>3} {'Symbole':<14} {'Categorie':<18} {'Score':<8} {'Prox':<6} {'Dir':<6} {'Nuage':<6} {'TK':<6} {'Chikou':<6} {'3R':<5} {'Twist':<6} {'Lag':<5} {'Plat':<5} {'Rejet':<6} {'Liq':<4} {'Signal':<12}")
-    print(f"  {'-'*3} {'-'*14} {'-'*18} {'-'*8} {'-'*6} {'-'*6} {'-'*6} {'-'*6} {'-'*6} {'-'*5} {'-'*6} {'-'*5} {'-'*5} {'-'*6} {'-'*4} {'-'*12}")
+    print(f"\n  {'':>3} {'Symbole':<14} {'Categorie':<18} {'Score':<8} {'Prox':<6} {'Dir':<6} {'Nuage':<6} {'TK':<6} {'Chikou':<6} {'3R':<5} {'Twist':<6} {'Lag':<5} {'Plat':<5} {'Rejet':<6} {'Liq':<4} {'Conf.':<8} {'Signal':<12}")
+    print(f"  {'-'*3} {'-'*14} {'-'*18} {'-'*8} {'-'*6} {'-'*6} {'-'*6} {'-'*6} {'-'*6} {'-'*5} {'-'*6} {'-'*5} {'-'*5} {'-'*6} {'-'*4} {'-'*8} {'-'*12}")
     for rank, s in enumerate(all_scores[:15], 1):
-        print(f"  {rank:<3} {s['sym']:<14} {s['cat']:<18} {s['total']:<8.1f} {s['prox']:<6} {s['dir_score']:<6} {s['cloud_score']:<6} {s['tk_score']:<6} {s['chikou_score']:<6} {s['rules_score']:<5} {s['twist_score']:<6} {s['lagging_score']:<5} {s['flat_score']:<5} {s['rejet_score']:<6} {s['liq']:<4} {s['direction']:<12}")
+        conf_label = s['conf'].label if s['conf'] else "N/A"
+        conf_score = s['conf'].score if s['conf'] else 0
+        conf_str = f"{conf_score}/{conf_label}" if s['conf'] else "N/A"
+        print(f"  {rank:<3} {s['sym']:<14} {s['cat']:<18} {s['total']:<8.1f} {s['prox']:<6} {s['dir_score']:<6} {s['cloud_score']:<6} {s['tk_score']:<6} {s['chikou_score']:<6} {s['rules_score']:<5} {s['twist_score']:<6} {s['lagging_score']:<5} {s['flat_score']:<5} {s['rejet_score']:<6} {s['liq']:<4} {conf_str:<12} {s['direction']:<12}")
 
     # --- DETAIL TOP 3 ---
     print(f"\n{'=' * 130}")
@@ -573,7 +718,30 @@ def main():
               f"nuage={s['cloud_score']}, tk={s['tk_score']}, chikou={s['chikou_score']}, "
               f"3regles={s['rules_score']}, twist={s['twist_score']}, lagging={s['lagging_score']}, "
               f"plat={s['flat_score']}, rejet={s['rejet_score']}, liq={s['liq']})")
+        conf_label = s['conf'].label if s['conf'] else "N/A"
+        conf_score = s['conf'].score if s['conf'] else 0
+        print(f"  Confiance: {conf_score}/100 ({conf_label}) | "
+              f"Alignment TF={s['conf'].tf_alignment_score if s['conf'] else 0}/30, "
+              f"Kumo={s['conf'].kumo_quality_score if s['conf'] else 0}/20, "
+              f"3R={s['conf'].rules_score if s['conf'] else 0}/20, "
+              f"Chikou={s['conf'].chikou_reliability if s['conf'] else 0}/10, "
+              f"SSB={s['conf'].ssb_support_score if s['conf'] else 0}/10, "
+              f"Kijun={s['conf'].kijun_stability if s['conf'] else 0}/10")
+        bt_est = s.get("bt_estimate", {})
+        tp = s.get("trade_plan", {})
+        verdict = bt_est.get("verdict", "N/A")
+        wr_est = bt_est.get("win_rate", 0)
         print(f"  Direction: {s['direction']} ({s['dir_detail']} timeframes)")
+        print(f"  Backtest: ~{wr_est:.0f}% win rate estime | Verdict: {verdict} ({bt_est.get('reason', '')})")
+        if tp:
+            rr = tp.get("rr", 0)
+            print(f"  Trade plan: Entree={tp.get('entry', 0):.5f} Stop={tp.get('stop', 0):.5f} "
+                  f"TP={tp.get('tp', 0):.5f} RR={rr:.2f} "
+                  f"R={tp.get('risk_pct', 0):.3f}% T={tp.get('reward_pct', 0):.3f}%")
+            sz = s.get("sizing", {})
+            if sz.get("units"):
+                print(f"  Sizing (10k, 1%% risque): {sz['units']:.2f} unites, "
+                      f"notionnel={sz.get('notional', 0):.2f}")
         for tf in TIMEFRAMES:
             d = s["tf_data"][tf]
             if d:
