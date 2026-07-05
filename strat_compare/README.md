@@ -27,8 +27,10 @@
 | # | Stratégie | Type | Signal d'entrée |
 |:--:|:---|:---|:---|
 | ★ | **DXY → XAUUSD** 🆕 | Correlation | DXY.cash H1 fort (>1.5σ) → entrée inverse XAUUSD |
+| ★ | **DXY → XAGUSD** 🆕🥇 | Correlation | DXY.cash H1 fort (>1.5σ) → entrée inverse XAGUSD (MEILLEURE PERF) |
 
-> Voir [STRATEGIE_DXY.md](STRATEGIE_DXY.md) pour l'analyse complète de la stratégie de corrélation.
+> Voir [STRATEGIE_DXY.md](STRATEGIE_DXY.md) pour l'analyse complète de la stratégie de corrélation.  
+> **Meilleur actif : XAGUSD** (+25.7%, Sharpe +1.45). Bot dédié : `dxy_xag_bot.py`.
 
 ---
 
@@ -40,16 +42,16 @@
 
 | Stratégie | Sharpe moy | Win Rate moy | Return moy | MaxDD moy | Trades moy |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| **Stochastic** 🥇 | **-1.08** | 48.3% | **-5.99%** | -11.3% | 43 |
-| RSI 🥈 | -0.25 | 43.4% | -0.09% | -4.3% | 29 |
-| **Swing_SR** 🥉 | **0.01** | 63.6% | -1.30% | -4.9% | 37 |
+| **Stochastic** | **-1.08** | 48.3% | **-5.99%** | -11.3% | 43 |
+| RSI | -0.25 | 43.4% | -0.09% | -4.3% | 29 |
+| **Swing_SR** | **0.01** | 63.6% | -1.30% | -4.9% | 37 |
 | MACD | -1.03 | 39.8% | -0.39% | -8.0% | 62 |
 | Bollinger | -1.30 | 42.7% | -5.68% | -9.3% | 44 |
 | EMA Cross | -1.53 | 41.2% | -3.23% | -7.9% | 38 |
 | Parabolic SAR | -1.68 | 39.4% | -4.38% | -9.9% | 58 |
 
-> **Aucune stratégie n'est rentable** sur la période testée avec des coûts réalistes. Le marché de jan-juil 2026 était un range sans tendance claire, défavorable aux stratégies testées.
-> Les meilleurs résultats ponctuels : **Stochastic GBPUSD H4** (Sharpe 1.78, +4.58%) et **Swing_SR GBPUSD H4** (Sharpe 1.56, +2.36%).
+> **Les stratégies classiques sont toutes perdantes** sur la période. La seule stratégie rentable est **DXY→XAGUSD H4** (+25.7%, Sharpe +1.45).
+> Les meilleurs classiques : **Stochastic GBPUSD H4** (Sharpe 1.78, +4.58%) et **Swing_SR GBPUSD H4** (Sharpe 1.56, +2.36%).
 
 ---
 
@@ -323,8 +325,7 @@ python swing_sr_bot.py --interval 300
 
 ### Prochaines étapes suggérées
 
-1. **Backtest longue période** (2020-2026) pour voir le comportement en trend et en crise
-2. **Optimisation des paramètres** par grid search sur chaque stratégie
-3. **Ajout de filtres** (ADX, volatilité, session horaire) pour réduire les faux signaux
-4. **Test sur plus de symboles** (US500, GER40, USDJPY) pour la diversification
-5. **Walk-forward analysis** pour détecter l'overfitting
+1. **Lancer le bot XAGUSD en dry-run** : `python dxy_xag_bot.py --dry-run`
+2. **Backtest longue période** (2020-2026) pour voir le comportement en tendance et en crise
+3. **Ajout de trailing stop** sur XAGUSD pour voir si on peut réduire le drawdown (−9.6%)
+4. **Walk-forward analysis** pour détecter l'overfitting

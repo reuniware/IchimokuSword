@@ -1,9 +1,10 @@
 # GUIDE DXY_BOT — Bot Live DXY.cash → XAUUSD H4
 
-> **Version :** 1.0  
+> **Version :** 1.1  
 > **Fichier :** `strat_compare/dxy_xau_bot.py`  
 > **Backtest associé :** `strat_compare/_dxy_xau_backtest.py`  
-> **Stratégie détaillée :** `strat_compare/STRATEGIE_DXY.md`
+> **Stratégie détaillée :** `strat_compare/STRATEGIE_DXY.md`  
+> **Variante XAGUSD :** `strat_compare/GUIDE_XAG_BOT.md`
 
 ---
 
@@ -322,10 +323,31 @@ python-dotenv (via src.config.load_env)
 
 | Fichier | Contenu |
 |:---|:---|
-| `strat_compare/dxy_xau_bot.py` | Bot live (ce guide) |
-| `strat_compare/_dxy_xau_backtest.py` | Backtest multi-TF |
-| `strat_compare/_corr_analysis.py` | Analyse de corrélation XAUUSD/DXY |
-| `strat_compare/STRATEGIE_DXY.md` | Doc stratégie complète |
+| Fichier | Contenu |
+|:---|:---|
+| `strat_compare/dxy_xau_bot.py` | Bot live XAUUSD (ce guide) |
+| `strat_compare/dxy_xag_bot.py` | **Bot live XAGUSD** (Argent, meilleure perf) |
+| `strat_compare/GUIDE_XAG_BOT.md` | Guide complet du bot XAGUSD |
+| `strat_compare/_dxy_xau_backtest.py` | Backtest multi-TF XAUUSD |
+| `strat_compare/_corr_analysis.py` | Analyse de corrélation DXY/XAUUSD |
+| `strat_compare/STRATEGIE_DXY.md` | Doc stratégie complète (XAU + XAG) |
+| `strat_compare/ANALYSE_CORRELATION_DXY.md` | Corrélation DXY vs 28+ actifs |
 | `strat_compare/RAPPORT_GLOBAL.md` | Synthèse toutes stratégies |
 | `strat_compare/SPECS_STRATEGIES.md` | Spécifications techniques |
+| `strat_compare/TODO-RESEARCH.md` | Plan de test en 4 phases |
 | `src/config.py` | load_env() pour credentials MT5 |
+
+---
+
+## 12. Pour aller plus loin — XAGUSD (Argent)
+
+Un bot dédié à **XAGUSD (Silver)** a été développé sur le même principe : `strat_compare/dxy_xag_bot.py`.
+
+| Métrique | **XAGUSD H4** 🥇 | XAUUSD H4 |
+|:---|---:|---:|
+| Retour 6 mois | **+25.70%** | +9.22% |
+| Sharpe | **+1.45** | +1.25 |
+| Win Rate | **55.6%** | 55.0% |
+| FTMO 6 mois | **+18.29%** | +14.48% |
+
+> Voir [GUIDE_XAG_BOT.md](GUIDE_XAG_BOT.md) pour l'installation et l'utilisation du bot XAGUSD.
