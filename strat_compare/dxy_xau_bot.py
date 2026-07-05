@@ -88,8 +88,6 @@ def detect_dxy_signal(df_dxy_h1, df_dxy_h4, df_xau_h4, df_xau_corr, config):
     """
     threshold = config["threshold_std"]
     std_win = config["std_window"]
-    sl_atr = config["sl_atr"]
-    tp_atr = config["tp_atr"]
     atr_period = config["atr_period"]
     corr_min = config["rolling_corr_min"]
     h4_sma_period = config["h4_sma_period"]
@@ -130,35 +128,43 @@ def detect_dxy_signal(df_dxy_h1, df_dxy_h4, df_xau_h4, df_xau_corr, config):
     xau_ret_h1 = xau_h1.loc[common].pct_change() * 100
     dxy_ret_h1 = dxy_close.loc[common].pct_change() * 100
     roll_corr = xau_ret_h1.rolling(20).corr(dxy_ret_h1)
-    corr_val = roll_corr.iloc[-1]
+    # Aligner la correlation sur la meme barre H1 que le signal (i_h1 = n-2)
+    # roll_corr et dxy_ret partagent le meme index -> utiliser i_h1
+    if i_h1 >= len(roll_corr):
+        return None
+    corr_val = roll_corr.iloc[i_h1]
     if pd.notna(corr_val) and corr_val > corr_min:
         return None
 
-    # --- Filtre 2: Tendance DXY H4 ---
-    dxy_h4_close = df_dxy_h4['close']
-    dxy_h4_sma = dxy_h4_close.rolling(h4_sma_period).mean()
-    i_h4 = len(df_dxy_h4) - 2
-    if i_h4 >= h4_sma_period:
-        h4_bullish = dxy_h4_close.iloc[i_h4] > dxy_h4_sma.iloc[i_h4]
+    # --- Filtre 2: Tendance DXY H4 (H1 close vs H4 SMA projetee, comme le backtest) ---
+    dxy_h4_sma = df_dxy_h4['close'].rolling(h4_sma_period).mean()
+    dxy_h4_trend_h1 = dxy_h4_sma.reindex(df_dxy_h1.index, method='ffill')
+    if i_h1 >= h4_sma_period and pd.notna(dxy_h4_trend_h1.iloc[i_h1]):
+        h4_bullish = dxy_close.iloc[i_h1] > dxy_h4_trend_h1.iloc[i_h1]
         if trade_dir == "SHORT" and not h4_bullish:
             return None
         if trade_dir == "LONG" and h4_bullish:
             return None
 
     # --- XAUUSD H4: ATR, prix, confirmation bougie ---
-    xau_close = df_xau_h4['close']
-    xau_high = df_xau_h4['high']
-    xau_low = df_xau_h4['low']
-    atr = compute_atr(xau_high, xau_low, xau_close, atr_period)
-
-    i_xau = len(df_xau_h4) - 2
+    # Aligner temporellement: trouver la barre H4 qui contient le signal DXY H1
+    h1_signal_time = df_dxy_h1.index[i_h1]
+    xau_idx_arr = df_xau_h4.index.get_indexer([h1_signal_time], method='ffill')
+    if xau_idx_arr[0] < 0:
+        return None
+    i_xau = int(xau_idx_arr[0])
+    # N'utiliser que les barres H4 completees (pas la barre en cours)
+    if i_xau >= len(df_xau_h4) - 1:
+        return None
     if i_xau < 20:
         return None
+
+    atr = compute_atr(df_xau_h4['high'], df_xau_h4['low'], df_xau_h4['close'], atr_period)
     a = atr.iloc[i_xau]
     if pd.isna(a) or a == 0:
         return None
 
-    curr_close = xau_close.iloc[i_xau]
+    curr_close = df_xau_h4['close'].iloc[i_xau]
     curr_open = df_xau_h4['open'].iloc[i_xau]
 
     if trade_dir == "LONG" and not (curr_close > curr_open):
@@ -166,24 +172,16 @@ def detect_dxy_signal(df_dxy_h1, df_dxy_h4, df_xau_h4, df_xau_corr, config):
     if trade_dir == "SHORT" and not (curr_close < curr_open):
         return None
 
-    # SL/TP
-    if trade_dir == "LONG":
-        sl = curr_close - sl_atr * a
-        tp = curr_close + tp_atr * a
-    else:
-        sl = curr_close + sl_atr * a
-        tp = curr_close - tp_atr * a
-
+    # SL/TP seront recalcules dans place_order() base sur le prix d'execution reel
     return {
         "direction": trade_dir,
-        "entry_price": curr_close,
-        "sl_price": sl,
-        "tp_price": tp,
         "atr": a,
         "dxy_direction": dxy_dir,
         "dxy_ret": ret_i,
         "dxy_threshold": thresh_i,
         "correlation": corr_val,
+        "candle_close": curr_close,
+        "bar_time": df_xau_h4.index[i_xau],
     }
 
 
@@ -247,8 +245,15 @@ class DxyXauBot:
 
     # ---------- Data ----------
     def fetch_bars(self, symbol, tf, min_bars):
+        """Fetch bars with fallback if broker has less history than requested."""
         mt5.symbol_select(symbol, True)
         rates = mt5.copy_rates_from_pos(symbol, tf, 0, min_bars)
+        if rates is None or len(rates) == 0:
+            for count in [50000, 20000, 10000, 5000, 1000]:
+                rates = mt5.copy_rates_from_pos(symbol, tf, 0, count)
+                if rates is not None and len(rates) > 0:
+                    self.logger.debug("%s: fallback fetch -> %d bars", symbol, len(rates))
+                    break
         if rates is None or len(rates) == 0:
             return None
         df = pd.DataFrame(rates)
@@ -351,17 +356,20 @@ class DxyXauBot:
             return None
 
         direction = signal["direction"]
-        sl_price = signal["sl_price"]
-        tp_price = signal["tp_price"]
+        a = signal["atr"]
 
         if direction == "LONG":
             order_type = mt5.ORDER_TYPE_BUY
             exec_price = tick.ask
+            sl_price = exec_price - self.cfg["sl_atr"] * a
+            tp_price = exec_price + self.cfg["tp_atr"] * a
         else:
             order_type = mt5.ORDER_TYPE_SELL
             exec_price = tick.bid
+            sl_price = exec_price + self.cfg["sl_atr"] * a
+            tp_price = exec_price - self.cfg["tp_atr"] * a
 
-        # Calculer le risque base sur le prix d'execution REEL (pas le close historique)
+        # Calculer le risque base sur le prix d'execution REEL
         sl_dist_pct = abs(exec_price - sl_price) / exec_price * 100
         lot_size = self.calculate_lot_size(sl_dist_pct)
 
@@ -413,14 +421,16 @@ class DxyXauBot:
             self._daily_pnl_date = today
             self._daily_loss_hit = False
             account = mt5.account_info()
-            self._start_of_day_balance = account.balance if account else 10000.0
-            self.logger.info("Nouveau jour FTMO — balance: %.2f", self._start_of_day_balance)
+            eq = account.equity if account else 10000.0
+            self._start_of_day_balance = eq
+            self.logger.info("Nouveau jour FTMO — equity: %.2f", eq)
 
     def _daily_pnl(self):
+        """P&L quotidien base sur equity (inclut le P&L flottant — regle FTMO)."""
         account = mt5.account_info()
         if account is None:
             return 0.0
-        return account.balance - self._start_of_day_balance
+        return account.equity - self._start_of_day_balance
 
     # ---------- Boucle ----------
     def run_once(self):
@@ -464,12 +474,13 @@ class DxyXauBot:
             bars_since = len(xau_h4.loc[self.last_signal_bar_time:]) - 1
             if bars_since < self.cfg["cooldown_bars"]:
                 self.logger.debug("Cooldown: %d/%d barres", bars_since, self.cfg["cooldown_bars"])
-                return signal
+                return None
 
-        # Anti-doublon
+        # Anti-doublon (evite re-entree immediate apres SL/TP meme direction)
         if self.last_signal_dir == signal["direction"]:
             self.logger.debug("Signal %s ignore (identique au precedent)", signal["direction"])
-            return signal
+            # Reset anti-doublon pour permettre le prochain signal oppose
+            return None
 
         # Positions existantes
         positions = self.get_positions()
@@ -477,7 +488,7 @@ class DxyXauBot:
             pos = positions[0]
             if pos["type"] == signal["direction"]:
                 self.logger.debug("Deja en position %s", pos["type"])
-                return signal
+                return None
             else:
                 self.logger.info("Signal oppose (%s -> %s) — fermeture #%d",
                                  pos["type"], signal["direction"], pos["ticket"])
@@ -486,18 +497,18 @@ class DxyXauBot:
 
         if positions:
             self.logger.debug("Position encore ouverte, skip")
-            return signal
+            return None
 
-        # FTMO: marge restante
+        # FTMO: marge restante (basee sur equity, pas balance seule)
         remaining = daily_limit + daily_pnl
         original_risk = self.cfg["risk_pct"]
         account = mt5.account_info()
-        balance = account.balance if account else 10000
-        max_risk = original_risk / 100.0 * balance
+        eq = account.equity if account else 10000.0
+        max_risk = original_risk / 100.0 * eq
         if remaining <= 0:
-            return signal
+            return None
         if max_risk > remaining:
-            self.cfg["risk_pct"] = max(remaining / balance * 100, 0.1)
+            self.cfg["risk_pct"] = max(remaining / eq * 100, 0.1)
 
         try:
             ticket = self.place_order(signal)
@@ -505,7 +516,7 @@ class DxyXauBot:
             self.cfg["risk_pct"] = original_risk
 
         if ticket is not None:
-            self.last_signal_bar_time = xau_h4.index[-2]
+            self.last_signal_bar_time = signal["bar_time"]
             self.last_signal_dir = signal["direction"]
 
         return signal
@@ -538,11 +549,9 @@ class DxyXauBot:
                     signal = self.run_once()
                     if signal:
                         corr_str = f"Corr={signal['correlation']:.3f}" if pd.notna(signal.get('correlation')) else "Corr=N/A"
-                        self.logger.info("  >> %s %s | Entry=%.2f | SL=%.2f | TP=%.2f | "
-                                         "ATR=%.2f | DXY=%s(%.3f%%) | %s",
+                        self.logger.info("  >> %s %s | Close=%.2f | ATR=%.2f | DXY=%s(%.3f%%) | %s",
                                          self.cfg["trade_symbol"], signal["direction"],
-                                         signal["entry_price"], signal["sl_price"],
-                                         signal["tp_price"], signal["atr"],
+                                         signal["candle_close"], signal["atr"],
                                          signal["dxy_direction"], signal["dxy_ret"],
                                          corr_str)
                 except Exception as e:
@@ -563,10 +572,11 @@ class DxyXauBot:
             self.logger.info("Arret (Ctrl+C)")
         finally:
             positions = self.get_positions()
-            balance = mt5.account_info().balance if mt5.account_info() else 0
+            acc = mt5.account_info()
+            eq = acc.equity if acc else 0
             self.logger.info("=" * 70)
-            self.logger.info("  Session terminee | Trades: %d | Positions: %d | Balance: %.2f",
-                             self.total_trades, len(positions), balance)
+            self.logger.info("  Session terminee | Trades: %d | Positions: %d | Equity: %.2f",
+                             self.total_trades, len(positions), eq)
             self.logger.info("=" * 70)
             self.disconnect()
 
