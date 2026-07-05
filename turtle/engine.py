@@ -251,9 +251,8 @@ def run_backtest(
 
         # --- Verifier signal d'entree ---
         if position is None:
-            entry_sig = signals['entry_signal'].iloc[i]
-
             if strategy == 'turtle_original':
+                entry_sig = signals['entry_signal'].iloc[i]
                 if entry_sig in ('LONG', 'SHORT'):
                     # Turtle originale : entree standard
                     entry_p = _apply_costs(
@@ -276,7 +275,8 @@ def run_backtest(
 
             elif strategy == 'turtle_soup':
                 trigger = signals['soup_trigger'].iloc[i]
-                if trigger and entry_sig in ('LONG', 'SHORT'):
+                soup_dir = signals['soup_setup'].iloc[i]
+                if trigger and soup_dir in ('LONG', 'SHORT'):
                     entry_p = _apply_costs(
                         current_close, asset_class, True
                     ) if costs_enabled else current_close
@@ -286,13 +286,13 @@ def run_backtest(
 
                     if pd.isna(stop_p):
                         stop_p = _compute_turtle_stop(
-                            entry_p, entry_sig, current_atr, signals, i
+                            entry_p, soup_dir, current_atr, signals, i
                         )
                     if pd.isna(tp_p):
                         tp_p = 0
 
                     position = Position(
-                        direction=entry_sig,
+                        direction=soup_dir,
                         entry_time=current_time,
                         entry_price=entry_p,
                         stop_price=stop_p,

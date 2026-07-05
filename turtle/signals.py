@@ -195,6 +195,9 @@ def turtle_soup_signals(
     n: int = 20,
     min_ecart: int = 3,
     atr_period: int = 20,
+    stop_buffer: float = 1.0,
+    take_profit_mode: str = "milieu_range",
+    rr_ratio: float = 2.0,
 ) -> pd.DataFrame:
     """Genere les signaux de la strategie Turtle Soup.
 
@@ -205,30 +208,26 @@ def turtle_soup_signals(
     3. Le nouveau plus haut est confirme par une cloture au-dessus
        de l'ancien plus haut
     4. Entree : quand le prix repasse SOUS l'ancien plus haut
-    5. Stop : au-dessus du nouveau plus haut + buffer
-    6. TP : milieu du range
-
-    Setup LONG (faux breakdown baissier) : symetrique inverse.
+    5. Stop : au-dessus du nouveau plus haut + stop_buffer * ATR
+    6. TP selon take_profit_mode
 
     Args:
         df: DataFrame OHLCV
         n: Periode du canal Donchian
         min_ecart: Barres minimum entre ancien et nouveau extreme
         atr_period: Periode ATR
+        stop_buffer: Multiple d'ATR pour le stop
+        take_profit_mode: "milieu_range", "swing_oppose", ou "rr_fixe"
+        rr_ratio: Ratio risque/rendement si take_profit_mode="rr_fixe"
 
     Returns:
-        DataFrame avec colonnes supplementaires :
-        - dc_n_upper, dc_n_lower : canal Donchian
-        - atr : ATR
-        - soup_setup : 'SHORT', 'LONG', ou None
-        - soup_trigger : True si le setup est declenche (entree)
-        - soup_stop : prix du stop-loss
-        - soup_tp : prix du take-profit
+        DataFrame avec colonnes supplementaires.
     """
     result = df.copy()
     high = df['high']
     low = df['low']
     close = df['close']
+    n_bars = len(df)
 
     # -- Canal Donchian --
     dc_up, dc_lo, dc_mid = compute_donchian_channels(high, low, n)
@@ -238,98 +237,137 @@ def turtle_soup_signals(
     # -- ATR --
     result['atr'] = compute_atr(high, low, close, atr_period)
 
-    # -- Detection des extremes --
+    # -- Init colonnes --
     result['soup_setup'] = None
     result['soup_trigger'] = False
     result['soup_stop'] = np.nan
     result['soup_tp'] = np.nan
     result['soup_old_extreme'] = np.nan
+    result['soup_new_extreme'] = np.nan
 
-    for i in range(n + min_ecart, len(df)):
-        # --- Setup SHORT (faux breakout haussier) ---
-        # Nouveau plus haut sur n periodes ?
-        if high.iloc[i] >= dc_up.iloc[i - 1]:
+    # ==================================================================
+    # Setup detection (vectorise) : trouver les faux breakouts
+    # ==================================================================
+    # Nouveau plus haut/bas sur n periodes
+    is_new_high = high >= dc_up.shift(1)
+    is_new_low = low <= dc_lo.shift(1)
+
+    lookback_win = n * 3
+    setup_col = result.columns.get_loc('soup_setup')
+    old_ext_col = result.columns.get_loc('soup_old_extreme')
+    new_ext_col = result.columns.get_loc('soup_new_extreme')
+    atr_col = result.columns.get_loc('atr')
+    trigger_col = result.columns.get_loc('soup_trigger')
+    stop_col = result.columns.get_loc('soup_stop')
+    tp_col = result.columns.get_loc('soup_tp')
+
+    for i in range(n + lookback_win, n_bars):
+        # -- SHORT setup --
+        if is_new_high.iloc[i]:
             new_high = high.iloc[i]
+            # Chercher ancien plus haut dans [i-lookback_win, i-min_ecart]
+            lb_start = max(0, i - lookback_win)
+            lb_end = i - min_ecart
+            window_highs = high.iloc[lb_start:lb_end + 1]
+            if len(window_highs) > 0:
+                max_old = window_highs.max()
+                if max_old >= new_high * 0.998 and close.iloc[i] > max_old:
+                    old_idx = window_highs.idxmax()
+                    result.iloc[i, setup_col] = 'SHORT'
+                    result.iloc[i, old_ext_col] = max_old
+                    result.iloc[i, new_ext_col] = new_high
 
-            # Chercher un ancien plus haut >= min_ecart barres avant
-            lookback_start = max(0, i - n * 3)
-            lookback_end = i - min_ecart
-
-            for j in range(lookback_end, lookback_start - 1, -1):
-                if high.iloc[j] >= new_high * 0.998:  # ~egal (0.2% tolerance)
-                    old_high = high.iloc[j]
-
-                    # Confirmation : cloture au-dessus de l'ancien plus haut
-                    if close.iloc[i] > old_high:
-                        # Setup detecte — attendre le trigger
-                        # Le trigger est : prix repasse SOUS l'ancien plus haut
-                        # On verifie dans les barres suivantes...
-                        result.iloc[i, result.columns.get_loc('soup_setup')] = 'SHORT'
-                        result.iloc[i, result.columns.get_loc('soup_old_extreme')] = old_high
-                    break
-
-        # --- Setup LONG (faux breakdown baissier) ---
-        if low.iloc[i] <= dc_lo.iloc[i - 1]:
+        # -- LONG setup --
+        if is_new_low.iloc[i]:
             new_low = low.iloc[i]
+            lb_start = max(0, i - lookback_win)
+            lb_end = i - min_ecart
+            window_lows = low.iloc[lb_start:lb_end + 1]
+            if len(window_lows) > 0:
+                min_old = window_lows.min()
+                if min_old <= new_low * 1.002 and close.iloc[i] < min_old:
+                    result.iloc[i, setup_col] = 'LONG'
+                    result.iloc[i, old_ext_col] = min_old
+                    result.iloc[i, new_ext_col] = new_low
 
-            lookback_start = max(0, i - n * 3)
-            lookback_end = i - min_ecart
-
-            for j in range(lookback_end, lookback_start - 1, -1):
-                if low.iloc[j] <= new_low * 1.002:
-                    old_low = low.iloc[j]
-
-                    if close.iloc[i] < old_low:
-                        result.iloc[i, result.columns.get_loc('soup_setup')] = 'LONG'
-                        result.iloc[i, result.columns.get_loc('soup_old_extreme')] = old_low
-                    break
-
-    # --- Triggers (entree effective) ---
-    # Parcourt les barres suivantes pour trouver le trigger
-    for i in range(n + min_ecart, len(df) - 1):
-        if pd.isna(result['soup_setup'].iloc[i]):
+    # ==================================================================
+    # Triggers (boucle contrainte a 40 barres max par setup)
+    # ==================================================================
+    for i in range(n + lookback_win, n_bars - 1):
+        setup = result.iloc[i, setup_col]
+        if pd.isna(setup):
             continue
 
-        setup = result['soup_setup'].iloc[i]
-        old_ext = result['soup_old_extreme'].iloc[i]
-        atr_val = result['atr'].iloc[i]
+        old_ext = result.iloc[i, old_ext_col]
+        new_ext = result.iloc[i, new_ext_col]
+        atr_val = result.iloc[i, atr_col]
 
         if pd.isna(old_ext) or pd.isna(atr_val) or atr_val == 0:
             continue
 
-        # Chercher le trigger dans les 20 barres suivantes
-        for k in range(i + 1, min(i + 21, len(df))):
-            if setup == 'SHORT':
-                # Trigger : close < ancien plus haut (retour dans le range)
-                if close.iloc[k] < old_ext and not result['soup_trigger'].iloc[i]:
-                    result.iloc[k, result.columns.get_loc('soup_trigger')] = True
-                    result.iloc[k, result.columns.get_loc('soup_setup')] = 'SHORT'
-                    result.iloc[k, result.columns.get_loc('soup_old_extreme')] = old_ext
-                    # Stop : au-dessus du nouveau plus haut + buffer
-                    buffer = 0.5 * atr_val  # stop_buffer = 0.5 ATR
-                    result.iloc[k, result.columns.get_loc('soup_stop')] = (
-                        high.iloc[i] + buffer
-                    )
-                    # TP : milieu du range (old_high + recent_low) / 2
-                    recent_low = low.iloc[i - min_ecart:i].min()
-                    result.iloc[k, result.columns.get_loc('soup_tp')] = (
-                        (old_ext + recent_low) / 2.0
-                    )
-                    break
+        buffer = stop_buffer * atr_val
+        max_look = min(40, n_bars - i - 1)
 
-            elif setup == 'LONG':
-                if close.iloc[k] > old_ext and not result['soup_trigger'].iloc[i]:
-                    result.iloc[k, result.columns.get_loc('soup_trigger')] = True
-                    result.iloc[k, result.columns.get_loc('soup_setup')] = 'LONG'
-                    result.iloc[k, result.columns.get_loc('soup_old_extreme')] = old_ext
-                    buffer = 0.5 * atr_val
-                    result.iloc[k, result.columns.get_loc('soup_stop')] = (
-                        low.iloc[i] - buffer
-                    )
-                    recent_high = high.iloc[i - min_ecart:i].max()
-                    result.iloc[k, result.columns.get_loc('soup_tp')] = (
-                        (old_ext + recent_high) / 2.0
-                    )
-                    break
+        for k in range(i + 1, i + max_look + 1):
+            already_triggered = result.iloc[k, trigger_col]
+            if already_triggered:
+                continue
+
+            if setup == 'SHORT' and close.iloc[k] < old_ext:
+                result.iloc[k, trigger_col] = True
+                result.iloc[k, setup_col] = 'SHORT'
+                result.iloc[k, old_ext_col] = old_ext
+                result.iloc[k, stop_col] = new_ext + buffer
+                result.iloc[k, tp_col] = _compute_soup_tp(
+                    'SHORT', old_ext, new_ext, buffer,
+                    low.iloc[i - min_ecart:i].min(),
+                    high.iloc[i - min_ecart:i].max(),
+                    take_profit_mode, rr_ratio
+                )
+                break
+
+            elif setup == 'LONG' and close.iloc[k] > old_ext:
+                result.iloc[k, trigger_col] = True
+                result.iloc[k, setup_col] = 'LONG'
+                result.iloc[k, old_ext_col] = old_ext
+                result.iloc[k, stop_col] = new_ext - buffer
+                result.iloc[k, tp_col] = _compute_soup_tp(
+                    'LONG', old_ext, new_ext, buffer,
+                    low.iloc[i - min_ecart:i].min(),
+                    high.iloc[i - min_ecart:i].max(),
+                    take_profit_mode, rr_ratio
+                )
+                break
 
     return result
+
+
+def _compute_soup_tp(direction: str, old_ext: float, new_ext: float,
+                     stop_dist: float, range_low: float, range_high: float,
+                     tp_mode: str, rr_ratio: float) -> float:
+    """Calcule le take-profit pour un setup Turtle Soup.
+
+    - milieu_range : (old_ext + opposite_swing) / 2
+    - swing_oppose : le swing oppose du range
+    - rr_fixe : stop +/- rr_ratio * stop_distance
+    """
+    if tp_mode == "milieu_range":
+        if direction == 'SHORT':
+            return (old_ext + range_low) / 2.0
+        else:
+            return (old_ext + range_high) / 2.0
+
+    elif tp_mode == "swing_oppose":
+        if direction == 'SHORT':
+            return range_low
+        else:
+            return range_high
+
+    elif tp_mode == "rr_fixe":
+        if direction == 'SHORT':
+            return old_ext - rr_ratio * stop_dist
+        else:
+            return old_ext + rr_ratio * stop_dist
+
+    # Fallback: milieu du range
+    return (old_ext + range_low) / 2.0 if direction == 'SHORT' else (old_ext + range_high) / 2.0

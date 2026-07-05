@@ -26,7 +26,7 @@ from turtle.config import (
 
 # Extraire uniquement les cles acceptees par chaque fonction de signaux
 _TURTLE_ORIG_SIGNAL_KEYS = {'n1', 'n2', 'n_exit', 'atr_period', 'use_system2'}
-_TURTLE_SOUP_SIGNAL_KEYS = {'n', 'min_ecart', 'atr_period'}
+_TURTLE_SOUP_SIGNAL_KEYS = {'n', 'min_ecart', 'atr_period', 'stop_buffer', 'take_profit_mode', 'rr_ratio'}
 _TURTLE_ORIG_ENGINE_KEYS = {'pyramiding', 'max_units', 'pyramid_step_atr'}
 from turtle.data_fetcher import fetch_all_symbols, connect_mt5, get_asset_class
 from turtle.signals import (
