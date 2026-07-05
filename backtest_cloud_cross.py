@@ -91,6 +91,10 @@ SYMBOLS = [
 ]
 
 DEFAULT_TP_MIN_DISTANCE = 0.3  # %
+DEFAULT_SL_TYPE = "ssb"  # kijun, ssb, fixed
+DEFAULT_SL_PCT = 0.5  # % for fixed SL
+FTMO_RISK_PCT = 2.0  # % du capital risqué par trade
+FTMO_CAPITAL = 10000  # capital initial
 
 
 # ---------------------------------------------------------------------------
@@ -433,10 +437,13 @@ def backtest_symbol(mt5_name: str, max_bars: int = 2000,
                     quiet: bool = False,
                     timeframe: str = "D1",
                     use_mtf: bool = False,
-                    tp_min_distance: float = 0.3) -> Tuple[List[dict], dict]:
+                    tp_min_distance: float = 0.3,
+                    sl_type: str = "ssb",
+                    sl_pct: float = 0.5) -> Tuple[List[dict], dict]:
     """Backtest un symbole avec les critères mécaniques cloud + chikou.
 
     Si use_mtf=True, vérifie D1/W1 pour les niveaux bloquants et TP.
+    sl_type: "kijun", "ssb", ou "fixed" (% du prix d'entrée).
     Retourne (trades, stats) où stats = {mtf_chikou_skipped, mtf_chikou_ok}.
     """
     tf_cfg = TIMEFRAMES[timeframe]
@@ -534,8 +541,12 @@ def backtest_symbol(mt5_name: str, max_bars: int = 2000,
                     tp_min_distance,
                 )
 
+            # --- Calculer SL ---
+            sl_price = _compute_sl(price, direction, sl_type, sl_pct,
+                                   highs, lows, closes, i)
+
             entry = _build_entry(i, rates, price, direction, lookaheads,
-                                 n, result, tp_info,
+                                 n, result, tp_info, sl_price, sl_type,
                                  blocked_h4=blocked_h4,
                                  blocked_mtf=blocked_mtf)
             trades.append(entry)
@@ -567,9 +578,49 @@ def backtest_symbol(mt5_name: str, max_bars: int = 2000,
     return trades, stats
 
 
+def _compute_sl(entry_price: float, direction: str,
+                 sl_type: str, sl_pct: float,
+                 highs, lows, closes, bar_idx: int) -> Optional[float]:
+    """Calcule le prix du stop-loss selon le type choisi.
+
+    - kijun: Kijun H4 à l'entrée
+    - ssb: SSB H4 à l'entrée
+    - fixed: pourcentage fixe depuis le prix d'entrée
+    """
+    if sl_type == "fixed":
+        factor = 1.0 - sl_pct / 100.0 if direction == "LONG" else 1.0 + sl_pct / 100.0
+        return round(entry_price * factor, 5)
+
+    if bar_idx < 52:
+        return None
+
+    if sl_type == "kijun":
+        if len(highs) >= 26:
+            sl = float(compute_kijun_sen(highs, lows, 26))
+        else:
+            return None
+    elif sl_type == "ssb":
+        if len(highs) >= 52:
+            sl = float(compute_senkou_span_b(highs, lows, 52, 26))
+        else:
+            return None
+    else:
+        return None
+
+    # Vérifier que le SL est du bon côté
+    if direction == "LONG" and sl >= entry_price:
+        return None  # SL au-dessus ou égal au prix d'entrée = invalide
+    if direction == "SHORT" and sl <= entry_price:
+        return None
+
+    return round(sl, 5)
+
+
 def _build_entry(i: int, rates, price: float, direction: str,
-                 lookaheads: List[int], n: int, result,
+                 lookaheads: List[int],                 n: int, result,
                  tp_info: Optional[dict] = None,
+                 sl_price: Optional[float] = None,
+                 sl_type: str = "ssb",
                  blocked_h4: List[str] = None,
                  blocked_mtf: List[str] = None) -> dict:
     """Construit une entrée de trade avec lookahead, TP et Chikou blocked."""
@@ -606,6 +657,15 @@ def _build_entry(i: int, rates, price: float, direction: str,
     else:
         entry["has_tp"] = False
 
+    # SL info
+    if sl_price is not None:
+        entry["has_sl"] = True
+        entry["sl_price"] = sl_price
+        entry["sl_type"] = sl_type
+        entry["sl_distance_pct"] = round(abs(sl_price - price) / price * 100.0, 3)
+    else:
+        entry["has_sl"] = False
+
     for la in lookaheads:
         if i + la >= n:
             continue
@@ -619,16 +679,39 @@ def _build_entry(i: int, rates, price: float, direction: str,
         entry[f"mag_{la}"] = round(abs(change), 3)
 
         # Check TP hit within lookahead
+        tp_hit = False
         if entry["has_tp"]:
             tp_price = entry["tp_price"]
             if direction == "LONG":
-                # Check if any high between i+1 and i+la >= tp_price
                 highs_slice = rates['high'][i + 1:i + la + 1]
                 tp_hit = bool(np.any(highs_slice >= tp_price))
             else:
                 lows_slice = rates['low'][i + 1:i + la + 1]
                 tp_hit = bool(np.any(lows_slice <= tp_price))
-            entry[f"tp_hit_{la}"] = 1 if tp_hit else 0
+        entry[f"tp_hit_{la}"] = 1 if tp_hit else 0
+
+        # Check SL hit within lookahead
+        sl_hit = False
+        if entry["has_sl"]:
+            sl_p = entry["sl_price"]
+            if direction == "LONG":
+                lows_slice = rates['low'][i + 1:i + la + 1]
+                sl_hit = bool(np.any(lows_slice <= sl_p))
+            else:
+                highs_slice = rates['high'][i + 1:i + la + 1]
+                sl_hit = bool(np.any(highs_slice >= sl_p))
+        entry[f"sl_hit_{la}"] = 1 if sl_hit else 0
+
+        # Outcome: what happened first within lookahead?
+        # Priority: TP_HIT > SL_HIT > WIN > LOSS > OPEN
+        if tp_hit:
+            entry[f"outcome_{la}"] = "TP_HIT"
+        elif sl_hit:
+            entry[f"outcome_{la}"] = "SL_HIT"
+        elif entry[f"win_{la}"] == 1:
+            entry[f"outcome_{la}"] = "WIN"
+        else:
+            entry[f"outcome_{la}"] = "LOSS"
 
     return entry
 
@@ -639,8 +722,10 @@ def _build_entry(i: int, rates, price: float, direction: str,
 
 def print_report(all_results: Dict[str, List[dict]],
                  lookaheads: List[int],
-                 la_display: List[str]) -> None:
-    """Affiche le rapport: win rates par LONG/SHORT, par symbole, TP stats."""
+                 la_display: List[str],
+                 sl_type: str = "ssb",
+                 ftmo: bool = False) -> None:
+    """Affiche le rapport: win rates, SL stats, TP stats, FTMO P&L."""
     all_trades = []
     for sym, trades in all_results.items():
         for t in trades:
@@ -653,6 +738,7 @@ def print_report(all_results: Dict[str, List[dict]],
     mid_disp = la_display[2]
 
     has_tp = any(t.get("has_tp") for t in all_trades)
+    has_sl = any(t.get("has_sl") for t in all_trades)
 
     print(f"\n{'='*110}")
     print("  BACKTEST MÉCANIQUE - FRANCHISSEMENT NUAGE + CHIKOU"
@@ -668,6 +754,12 @@ def print_report(all_results: Dict[str, List[dict]],
           f"(LONG={len(longs)}, SHORT={len(shorts)})")
     print(f"  Ratio: L/S = {len(longs)/max(len(shorts),1):.1f}")
 
+    if has_sl:
+        n_sl = sum(1 for t in all_trades if t.get("has_sl"))
+        sl_distances = [t.get("sl_distance_pct", 0) for t in all_trades if t.get("has_sl")]
+        avg_sl = sum(sl_distances) / len(sl_distances) if sl_distances else 0
+        print(f"  SL       : {sl_type} — {n_sl}/{len(all_trades)} trades "
+              f"— distance moy={avg_sl:.2f}%")
     if has_tp:
         n_tp = sum(1 for t in all_trades if t.get("has_tp"))
         tp_distances = [t.get("tp_distance_pct", 0) for t in all_trades if t.get("has_tp")]
@@ -811,6 +903,11 @@ def print_report(all_results: Dict[str, List[dict]],
               f"{'OUI' if t.get(f'win_{mid_la}')==1 else 'NON':<4} "
               f"{tp_str:<10} {tp_hit:<6}")
 
+    # --- FTMO Simulation ---
+    if ftmo and has_sl:
+        _print_ftmo_simulation(all_trades, longs, shorts, lookaheads,
+                               la_display, mid_la, mid_disp, sl_type)
+
     print(f"\n{'='*110}")
     print("  FIN DU RAPPORT")
     print(f"{'='*110}\n")
@@ -828,6 +925,86 @@ def _convert_native(obj):
     if hasattr(obj, 'item'):
         return obj.item()
     return obj
+
+
+def _print_ftmo_simulation(all_trades, longs, shorts, lookaheads,
+                           la_display, mid_la, mid_disp, sl_type):
+    """Simulation FTMO: risque 2% par trade, capital $10k, levier 1:30."""
+    capital = FTMO_CAPITAL
+
+    # Trier par date
+    sorted_trades = sorted(all_trades, key=lambda t: t["date"])
+
+    print(f"\n{'='*110}")
+    print(f"  FTMO SIMULATION — Capital: ${FTMO_CAPITAL:,.0f} | Risque/trade: {FTMO_RISK_PCT}% | SL: {sl_type}")
+    print(f"{'='*110}")
+    print(f"  {'Date':<12} {'Symbole':<16} {'Dir':<6} {'Entree':<10} {'SL':<10} {'Outcome':<8} {'30H Chg%':<10} {'P&L':<10} {'Capital':<12}")
+    print(f"  {'-'*12} {'-'*16} {'-'*6} {'-'*10} {'-'*10} {'-'*8} {'-'*10} {'-'*10} {'-'*12}")
+
+    monthly_capital = {}
+    wins = 0
+    losses = 0
+
+    for t in sorted_trades:
+        if not t.get("has_sl"):
+            continue
+
+        sl_dist_pct = t.get("sl_distance_pct", 0.5)
+        outcome = t.get(f"outcome_{mid_la}", "LOSS")
+        change_pct = t.get(f"change_{mid_la}", 0)
+
+        # Position sizing: risk 2% of capital per trade
+        # position_value = risk_amount / sl_distance_pct * 100
+        risk_amount = capital * FTMO_RISK_PCT / 100.0
+        safe_sl = max(sl_dist_pct, 0.05)
+        position_value = risk_amount / (safe_sl / 100.0)
+        max_position = capital * 30
+        position_value = min(position_value, max_position)
+
+        if outcome == "SL_HIT":
+            pnl = -risk_amount
+            losses += 1
+        elif outcome == "TP_HIT":
+            tp_dist = t.get("tp_distance_pct", 0)
+            pnl = position_value * (tp_dist / 100.0)
+            wins += 1
+        elif outcome == "WIN":
+            raw_pnl = position_value * (change_pct / 100.0)
+            pnl = min(raw_pnl, risk_amount * 3)
+            wins += 1
+        else:
+            raw_pnl = position_value * (change_pct / 100.0)
+            pnl = max(raw_pnl, -risk_amount * 2)
+            if pnl < 0:
+                losses += 1
+            else:
+                wins += 1
+
+        capital += pnl
+        month_key = t["date"][:7]
+        monthly_capital[month_key] = capital
+
+        print(f"  {t['date'][:10]:<12} {t['symbol']:<16} {t['direction']:<6} "
+              f"{t['price']:<10.5f} {t.get('sl_price',0):<10.5f} {outcome:<8} "
+              f"{change_pct:<10.3f} ${pnl:<9.0f} ${capital:<11,.0f}")
+
+    roi = (capital - FTMO_CAPITAL) / FTMO_CAPITAL * 100.0
+    n_trades = wins + losses
+    wr = wins / max(n_trades, 1) * 100
+
+    print(f"\n  {'-'*100}")
+    print(f"  RESUME FTMO:")
+    print(f"    Trades   : {n_trades} (W={wins}, L={losses})")
+    print(f"    Win rate : {wr:.1f}%")
+    print(f"    P&L      : ${capital - FTMO_CAPITAL:,.0f}")
+    print(f"    ROI      : {roi:.1f}%")
+    print(f"    Capital  : ${capital:,.0f}")
+
+    # Monthly breakdown
+    if monthly_capital:
+        print(f"\n    CAPITAL PAR MOIS:")
+        for month in sorted(monthly_capital.keys()):
+            print(f"      {month}: ${monthly_capital[month]:,.0f}")
 
 
 def save_report(all_results: Dict[str, List[dict]],
@@ -896,6 +1073,15 @@ def main():
     parser.add_argument("--tp-min-distance", type=float,
                         default=DEFAULT_TP_MIN_DISTANCE,
                         help=f"Distance min entree->TP en %% (defaut: {DEFAULT_TP_MIN_DISTANCE})")
+    parser.add_argument("--sl-type", type=str,
+                        default=DEFAULT_SL_TYPE,
+                        choices=["kijun", "ssb", "fixed"],
+                        help=f"Type de stop-loss (defaut: {DEFAULT_SL_TYPE})")
+    parser.add_argument("--sl-pct", type=float,
+                        default=DEFAULT_SL_PCT,
+                        help=f"Distance SL en %% pour type=fixed (defaut: {DEFAULT_SL_PCT})")
+    parser.add_argument("--ftmo", action="store_true",
+                        help="Simuler P&L FTMO (risque 2%%, capital 10k)")
     args = parser.parse_args()
 
     load_env()
@@ -936,6 +1122,8 @@ def main():
     if args.mtf:
         print(f"  TP: niveau D1/W1 bloquant (SSB/Tenkan/Kijun/SenkouA), "
               f"min {args.tp_min_distance}%")
+    print(f"  SL: {args.sl_type}" + (f" (pct={args.sl_pct}%)" if args.sl_type == "fixed" else "") +
+          (" | FTMO sim" if args.ftmo else ""))
     print("=" * 110)
 
     all_results: Dict[str, List[dict]] = {}
@@ -951,6 +1139,8 @@ def main():
             timeframe=args.timeframe,
             use_mtf=args.mtf,
             tp_min_distance=args.tp_min_distance,
+            sl_type=args.sl_type,
+            sl_pct=args.sl_pct,
         )
         total_mtf_skipped += stats.get("mtf_chikou_skipped", 0)
         total_mtf_checked += stats.get("mtf_chikou_checked", 0)
@@ -966,7 +1156,8 @@ def main():
               f"({total_mtf_skipped/max(total_mtf_checked,1)*100:.0f}%)")
 
     if all_results:
-        print_report(all_results, lookaheads, la_display)
+        print_report(all_results, lookaheads, la_display,
+                     sl_type=args.sl_type, ftmo=args.ftmo)
         if not args.no_save:
             save_report(all_results, args.output)
     else:

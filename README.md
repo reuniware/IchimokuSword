@@ -118,6 +118,11 @@ python backtest_cloud_cross.py              # D1, sans MTF
 python backtest_cloud_cross.py --timeframe H4 --mtf     # H4 + TP D1/W1 + filtre Chikou MTF
 python backtest_cloud_cross.py --timeframe H1 --mtf     # H1 + TP H4/D1
 python backtest_cloud_cross.py --tp-min-distance 0.5    # TP min 0.5%
+
+# Avec stop-loss et simulation FTMO
+python backtest_cloud_cross.py --timeframe H4 --mtf --sl-type ssb --ftmo           # SL = SSB H4
+python backtest_cloud_cross.py --timeframe H4 --mtf --sl-type fixed --sl-pct 0.5 --ftmo  # SL fixe 0.5%
+python backtest_cloud_cross.py --symbols USDJPY,XAGUSD,XAUUSD --timeframe H4 --mtf --sl-type ssb --ftmo  # Top 3
 ```
 
 ### Infos compte
@@ -400,6 +405,7 @@ IchimokuSword/
 | 4 | Cloud+Chikou seul | H4 | 2 464 L | **53.0%** (30H) | 46.4% | Aucun |
 | 5 | Cloud+Chikou seul | H4 | 2 464 L | **56.2%** (120H) | 41.0% | Aucun |
 | 6 | **Cloud+Chikou+MTF** | H1 | 405 L | **49.6%** (30H) | 46.4% | 64% rejetés |
+| 7 | **Cloud+Chikou+MTF+SL** | H4 | 188 L | **64.1%** (30H) | — | SSB SL + FTMO |
 
 ### Scoring D1 — 44,664 signaux (25 symboles)
 
@@ -427,13 +433,26 @@ IchimokuSword/
 
 *Petit échantillon (184 trades)
 
-### Cloud+Chikou+MTF — 1,676 trades filtrés (25 symboles)
+### Cloud+Chikou+MTF + SL — 1 676 trades avec stop-loss
 
-| Direction | Trades | Win 30H | Win 120H |
-|:---------:|:------:|:-------:|:--------:|
-| **LONG** | 1 259 | **54.4%** | **56.2%** |
-| SHORT | 417 | 49.2% | 41.0% |
-| **Skippés** | 2 862 | — | 63% filtrés |
+| Direction | Trades | Win 30H | Win 120H | SL touché 30H |
+|:---------:|:------:|:-------:|:--------:|:-------------:|
+| **LONG** | 1 259 | **54.4%** | **56.2%** | 59% (SSB H4) |
+| SHORT | 417 | 49.2% | 41.0% | N/A |
+| **Skippés** | 2 862 | — | — | 63% filtrés |
+
+### FTMO Simulation — Top 3 Actifs (USDJPY + XAGUSD + XAUUSD)
+
+Simulation avec SL SSB H4, risque 2% par trade, capital $10k, levier 1:30.
+
+| Actif | Trades | Win 30H | FTMO P&L | FTMO ROI |
+|:------|:------:|:-------:|:--------:|:--------:|
+| USDJPY seul | 59 | 67.8% | -$657 | -6.6% |
+| XAGUSD seul | 61 | 65.6% | +$8,244 | +82.4% |
+| XAUUSD seul | 68 | 60.3% | +$10,394 | +103.9% |
+| **Top 3 combinés** | **188** | **64.1%** | **+$17,981** | **+179.8%** |
+
+**Résultat : +179.8% sur ~3 ans avec les 3 meilleurs actifs.** La diversification est clé : USDJPY seul est perdant, mais XAGUSD + XAUUSD compensent largement.
 
 ### TP D1/W1 (sur trades filtrés)
 
