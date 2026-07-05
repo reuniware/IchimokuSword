@@ -1,8 +1,8 @@
 # GUIDE DXY_BOT — Bot Live DXY.cash → XAUUSD H4
 
-> **Version :** 1.1  
+> **Version :** 2.0  
 > **Fichier :** `strat_compare/dxy_xau_bot.py`  
-> **Backtest associé :** `strat_compare/_dxy_xau_backtest.py`  
+> **Période testée :** 01/01/2025 → 03/07/2026 **(18 mois)**  
 > **Stratégie détaillée :** `strat_compare/STRATEGIE_DXY.md`  
 > **Variante XAGUSD :** `strat_compare/GUIDE_XAG_BOT.md`
 
@@ -19,7 +19,8 @@ DXY ↘ fort  ──▶  XAUUSD doit ↗  →  LONG XAUUSD
 
 - **Corrélation Pearson :** −0.72 (H1, H4, D1)
 - **Lead DXY :** 5-20 barres sur tous les TFs
-- **Meilleur TF :** H4 (20 trades/6 mois, 55% WR, Sharpe +1.25)
+- **Meilleur TF :** H4 (34 trades/18 mois, 47.1% WR, Sharpe +0.50)
+- **Scan 54 paires USD :** #14/51
 
 ---
 
@@ -323,8 +324,6 @@ python-dotenv (via src.config.load_env)
 
 | Fichier | Contenu |
 |:---|:---|
-| Fichier | Contenu |
-|:---|:---|
 | `strat_compare/dxy_xau_bot.py` | Bot live XAUUSD (ce guide) |
 | `strat_compare/dxy_xag_bot.py` | **Bot live XAGUSD** (Argent, meilleure perf) |
 | `strat_compare/GUIDE_XAG_BOT.md` | Guide complet du bot XAGUSD |
@@ -345,9 +344,9 @@ Un bot dédié à **XAGUSD (Silver)** a été développé sur le même principe 
 
 | Métrique | **XAGUSD H4** 🥇 | XAUUSD H4 |
 |:---|---:|---:|
-| Retour 6 mois | **+25.70%** | +9.22% |
-| Sharpe | **+1.45** | +1.25 |
-| Win Rate | **55.6%** | 55.0% |
-| FTMO 6 mois | **+18.29%** | +14.48% |
+| Retour 18 mois | **+32.97%** | +7.35% |
+| Sharpe 18 mois | **+0.98** | +0.50 |
+| FTMO 18 mois | **+23.19%** | +13.35% |
+| Rang 54 paires USD | **#1** 🏆 | #14 |
 
 > Voir [GUIDE_XAG_BOT.md](GUIDE_XAG_BOT.md) pour l'installation et l'utilisation du bot XAGUSD.

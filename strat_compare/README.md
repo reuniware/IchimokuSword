@@ -1,8 +1,9 @@
 # Strat Compare — Comparaison de stratégies sur forex & or
 
-> **Période :** 01/01/2026 → 03/07/2026 (6 mois)  
-> **Données :** MetaTrader5 (EURUSD, GBPUSD, XAUUSD, DXY.cash)  
-> **Timeframes :** M1, M5, M15, H1, H4, D1  
+> **Période :** 01/01/2025 → 03/07/2026 **(18 mois)** pour la stratégie DXY  
+> **Période classiques :** 01/01/2026 → 03/07/2026 (6 mois)  
+> **Données :** MetaTrader5 (54 symboles USD, DXY.cash)  
+> **Timeframes :** H4 uniquement pour la stratégie DXY (TFs inférieurs non rentables)  
 > **Capital initial :** $10 000  
 > **Stratégies :** 9 (7 classiques + Ichimoku + DXY Correlation)
 
@@ -30,7 +31,7 @@
 | ★ | **DXY → XAGUSD** 🆕🥇 | Correlation | DXY.cash H1 fort (>1.5σ) → entrée inverse XAGUSD (MEILLEURE PERF) |
 
 > Voir [STRATEGIE_DXY.md](STRATEGIE_DXY.md) pour l'analyse complète de la stratégie de corrélation.  
-> **Meilleur actif : XAGUSD** (+25.7%, Sharpe +1.45). Bot dédié : `dxy_xag_bot.py`.
+> **Meilleur actif : XAGUSD** (+32.97% sur 18 mois, Sharpe +0.98, **#1/51 paires USD**). Bot dédié : `dxy_xag_bot.py`.
 
 ---
 
@@ -50,7 +51,7 @@
 | EMA Cross | -1.53 | 41.2% | -3.23% | -7.9% | 38 |
 | Parabolic SAR | -1.68 | 39.4% | -4.38% | -9.9% | 58 |
 
-> **Les stratégies classiques sont toutes perdantes** sur la période. La seule stratégie rentable est **DXY→XAGUSD H4** (+25.7%, Sharpe +1.45).
+> **Les stratégies classiques sont toutes perdantes** sur la période. La seule stratégie rentable est **DXY→XAGUSD H4** (+32.97% sur 18 mois, Sharpe +0.98).
 > Les meilleurs classiques : **Stochastic GBPUSD H4** (Sharpe 1.78, +4.58%) et **Swing_SR GBPUSD H4** (Sharpe 1.56, +2.36%).
 
 ---

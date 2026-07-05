@@ -1,28 +1,31 @@
 # TODO-RESEARCH — Stratégie DXY.cash → XAUUSD / XAGUSD H4
 
 > **Date :** 05/07/2026  
-> **Stratégie retenue :** DXY.cash H1 fort (>1.5σ) → H4 inverse  
-> **Meilleur actif :** **XAGUSD (Argent)** — +25.7%, Sharpe +1.45  
-> **Alternative :** XAUUSD (Or) — +9.2%, Sharpe +1.25  
+> **Période testée :** 01/01/2025 → 03/07/2026 **(18 mois)**  
+> **Stratégie retenue :** DXY.cash H1 fort → H4 inverse  
+> **Meilleur actif :** **XAGUSD (Argent)** — +32.97%, Sharpe +0.98, **#1/51 paires USD**  
+> **Meilleur seuil XAGUSD (18 mois) :** **1.2σ** (+39.26%, Sharpe +1.07)  
+> **Alternative :** XAUUSD (Or) — +7.35%, Sharpe +0.50  
 > **Bots disponibles :**  
->   - `strat_compare/dxy_xau_bot.py` (XAUUSD, magic 260706)  
->   - `strat_compare/dxy_xag_bot.py` (XAGUSD 🥇, magic 270706)  
+>   - `strat_compare/dxy_xau_bot.py` (XAUUSD, magic 260706, seuil 1.5σ)  
+>   - `strat_compare/dxy_xag_bot.py` (XAGUSD 🥇, magic 270706, seuil **1.2σ**)  
 > **Guides :**  
 >   - `strat_compare/GUIDE_DXY_BOT.md`  
->   - `strat_compare/GUIDE_XAG_BOT.md` 🆕
+>   - `strat_compare/GUIDE_XAG_BOT.md`
 
 ---
 
 ## 📋 Rappel des performances backtest
 
-| Période | Trades | WR% | Ret% | Sharpe | MaxDD |
-|:---|:---:|:---:|:---:|:---:|:---:|
-| **Jan-Jul 2026 (6 mois)** | 15-20 | 53-55% | **+6.8% à +9.2%** | **+1.21** | −4.5% |
-| Juin 2026 seul | 4 | 25% | −2.47% | −1.82 | −3.8% |
+| Période | Actif | Trades | WR% | Ret% | Sharpe | MaxDD |
+|:---|:---|---:|:---:|:---:|:---:|:---:|
+| **18 mois (2025-2026)** | **XAGUSD** 🏆 | **27** | **51.9%** | **+32.97%** | **+0.98** | −9.6% |
+| 18 mois (2025-2026) | XAUUSD | 34 | 47.1% | +7.35% | +0.50 | −8.4% |
+| 6 mois (2026) | XAGUSD | 18 | 55.6% | +25.70% | +1.45 | −9.6% |
+| 6 mois (2026) | XAUUSD | 20 | 55.0% | +9.22% | +1.25 | −6.3% |
 
-> **XAGUSD est le meilleur actif** (+25.7%, Sharpe +1.45). XAUUSD est l'alternative (+9.2%, Sharpe +1.25).  
-> Les 2 bots partagent le même code (symbole, magic number et spread max changent).  
-> La stratégie est **rentable sur 6 mois** mais a des **mois perdants** (Juin −2.5% sur XAU).
+> **XAGUSD confirmé #1/51 paires USD** sur 18 mois (+32.97%). Seuil optimal : **1.2σ** (+39.26%, Sharpe +1.07).  
+> Les 2 bots partagent le même code (symbole, magic number et spread max changent).
 
 ---
 
@@ -119,7 +122,7 @@
   - ✅ Limite quotidienne avec equity (pas balance)
   - ✅ Réduction automatique du risque si marge FTMO restante faible
   - ✅ Blocage du trading si limite atteinte
-- [ ] **4.4** Backtest FTMO déjà fait : +14.5% ROI, 1 jour perdu sur 6 mois → **viable**
+- [ ] **4.4** Backtest FTMO déjà fait : XAGUSD +23.19% ROI (18 mois), XAUUSD +13.35% — **viable** (max 1 jour perdu)
 - [ ] **4.5** Lancer le bot sur le compte challenge FTMO
 - [ ] **4.6** Surveiller le `days_lost` — si >2-3 jours perdus, évaluer l'arrêt
 
@@ -156,8 +159,8 @@
 
 | Fichier | Utilité |
 |:---|:---|
-| `strat_compare/dxy_xag_bot.py` | **Bot live XAGUSD** (recommande, +25.7%) |
-| `strat_compare/dxy_xau_bot.py` | Bot live XAUUSD (alternative, +9.2%) |
+| `strat_compare/dxy_xag_bot.py` | **Bot live XAGUSD** (recommande, +32.97% sur 18 mois) |
+| `strat_compare/dxy_xau_bot.py` | Bot live XAUUSD (alternative, +7.35% sur 18 mois) |
 | `strat_compare/GUIDE_XAG_BOT.md` | Guide complet du bot XAGUSD 🆕 |
 | `strat_compare/GUIDE_DXY_BOT.md` | Guide complet du bot XAUUSD |
 | `strat_compare/STRATEGIE_DXY.md` | Doc stratégie : analyse corrélation, algo, résultats |

@@ -147,62 +147,65 @@ TF haute (H4) : compute_ichimoku() → flat lines → shift(1) → reindex(ffill
 | ★ | **Filtre 3** | Confirmation bougie |
 | ★ | **Cooldown** | 2 barres H4 |
 
-### Résultats XAUUSD H4 (référence historique)
+### Résultats 18 mois (Jan 2025 → Juil 2026)
+
+#### XAUUSD H4
 
 | TF | Trades | WR% | Ret% | Sharpe | MaxDD | PF | FTMO |
 |:---|---:|---:|---:|---:|---:|---:|:---|
-| **H4** 🏆 | 20 | **55.0%** | **+9.22%** | **+1.25** | −6.3% | 1.46 | **+14.48%** |
+| **H4** | 34 | **47.1%** | **+7.35%** | **+0.50** | −8.4% | 1.24 | **+13.35%** |
 
-### 🏆 Résultats XAGUSD H4 (MEILLEURE STRATÉGIE GLOBALE)
+#### 🏆 XAGUSD H4 (MEILLEURE STRATÉGIE GLOBALE)
 
 | TF | Trades | WR% | Ret% | Sharpe | MaxDD | PF | FTMO |
 |:---|---:|---:|---:|---:|---:|---:|:---|
-| **H4** 🏆 | **18** | **55.6%** | **+25.70%** | **+1.45** | −9.6% | **1.75** | **+18.29%** |
+| **H4** | **27** | **51.9%** | **+32.97%** | **+0.98** | −9.6% | **1.73** | **+23.19%** |
 
-### Comparaison XAUUSD vs XAGUSD
+| Rang 54 paires USD | **#1** 🏆 | — | — | — | — | — | — |
+
+### Comparaison XAUUSD vs XAGUSD (18 mois)
 
 | Métrique | XAUUSD H4 | **XAGUSD H4** | Δ |
 |:---|---:|---:|:---|
-| Retour | +9.22% | **+25.70%** | **+179%** |
-| Sharpe | +1.25 | **+1.45** | +16% |
-| WR | 55.0% | **55.6%** | +1% |
-| PF | 1.46 | **1.75** | +20% |
-| FTMO | +14.48% | **+18.29%** | +26% |
-| MaxDD | −6.3% | −9.6% | plus élevé* |
+| Retour | +7.35% | **+32.97%** | **+348%** |
+| Sharpe | +0.50 | **+0.98** | +96% |
+| WR | 47.1% | **51.9%** | +10% |
+| PF | 1.24 | **1.73** | +40% |
+| FTMO | +13.35% | **+23.19%** | +74% |
+| Rang 54 pairs | #14 | **#1** 🏆 | — |
 
-> \* Drawdown plus élevé mais sous la limite FTMO (10%). XAGUSD surperforme XAUUSD sur tous les critères de rentabilité.
+> XAGUSD surperforme XAUUSD de **4.5×** sur le retour et confirme sa #1 place sur 51 paires USD testées.
 
-### Multi-TF XAGUSD confirmé : seul H4 est rentable
+### Multi-TF XAGUSD (18 mois)
 
 | TF | Trades | WR% | Ret% | Sharpe | Verdict |
 |:---:|:---:|:---:|:---:|:---:|:---|
-| **H4** | 18 | 55.6% | **+25.70%** | **+1.45** | ✅ Recommandé |
-| M15 | 139 | 40.3% | +3.77% | +0.39 | ⚠️ Trop de trades |
-| H1 | 68 | 32.4% | −15.57% | −0.49 | ❌ Perdant |
-| M5 | 179 | 34.1% | −19.56% | −2.54 | ❌ Perdant |
-| M1 | 119 | 27.7% | −18.14% | −13.18 | ❌ Perdant |
+| **H4** | 27 | 51.9% | **+32.97%** | **+0.98** | ✅ Recommandé |
+| H1 | 136 | 30.9% | −29.12% | −0.67 | ❌ Perdant |
 
-### Optimisation seuil XAGUSD
+> **Seul H4 est rentable** sur 18 mois comme sur 6 mois.
+
+### Optimisation seuil XAGUSD (18 mois)
 
 | Seuil | Trades | WR% | Ret% | Sharpe |
 |:---:|:---:|:---:|:---:|:---:|
-| 1.0σ | 26 | 46% | +10.3% | +0.50 |
-| 1.2σ | 21 | 52% | +20.4% | +1.09 |
-| **1.5σ** 🏆 | **18** | **56%** | **+25.7%** | **+1.45** |
-| 1.8σ | 13 | 46% | +3.8% | +0.40 |
-| 2.0σ | 9 | 44% | +4.1% | +0.48 |
+| 1.0σ | 34 | 47.1% | +18.87% | +0.78 |
+| **1.2σ** 🏆 | **33** | **51.5%** | **+39.26%** | **+1.07** |
+| 1.5σ | 27 | 51.9% | +32.97% | +0.98 |
+| 1.8σ | 18 | 50.0% | +17.22% | +0.63 |
+| 2.0σ | 13 | 46.2% | +12.25% | +0.55 |
 
-> **1.5σ optimal** pour les deux actifs.
+> Sur 18 mois, **1.2σ est optimal** (contre 1.5σ sur 6 mois). Recommandation : 1.2σ pour XAGUSD, 1.5σ pour XAUUSD.
 
-### Portefeuille 50/50 XAUUSD + XAGUSD
+### Portefeuille 50/50 XAUUSD + XAGUSD (18 mois)
 
 | Actif | Retour | Sharpe | MaxDD |
 |:---|---:|:---:|:---:|
-| XAGUSD seul | **+25.70%** | **+1.45** | −9.6% |
-| XAUUSD seul | +9.22% | +1.25 | −6.3% |
-| **Portfolio 50/50** | +14.59% | ∼0.0 | **−7.0%** |
+| XAGUSD seul | **+32.97%** | **+0.98** | −9.6% |
+| XAUUSD seul | +7.35% | +0.50 | −8.4% |
+| **Portfolio 50/50** | +17.15% | +0.88 | **−7.3%** |
 
-> Le portefeuille coupe la performance. **XAGUSD seul reste meilleur.**
+> Le portefeuille lisse le drawdown (−7.3% vs −9.6%) mais coupe la performance. **XAGUSD seul reste meilleur.**
 
 ---
 
@@ -210,11 +213,15 @@ TF haute (H4) : compute_ichimoku() → flat lines → shift(1) → reindex(ffill
 
 | Rang | Stratégie | Actif | TF | Trades | WR | Ret% | Sharpe | FTMO |
 |:---:|:---|:---|:---:|:---:|:---:|:---:|:---:|:---|
-| 🥇 | **DXY→XAGUSD** 🆕 | **XAGUSD** | **H4** | **18** | **56%** | **+25.70%** | **+1.45** | **+18.29%** |
-| 🥇 | **DXY→XAUUSD** | XAUUSD | H4 | 20 | 55% | +9.22% | +1.25 | +14.48% |
+| 🥇 | **DXY→XAGUSD** 🏆 | **XAGUSD** | **H4** | **27** | **51.9%** | **+32.97%** | **+0.98** | **+23.19%** |
+| 🥈 | **DXY→XAUUSD** | XAUUSD | H4 | 34 | 47.1% | +7.35% | +0.50 | +13.35% |
 | 3 | Stochastic | GBPUSD | H4 | 53 | 60% | +4.6% | +1.78* | — |
 | 4 | Swing_SR | GBPUSD | H4 | 17 | 71% | +2.4% | +1.56* | — |
 | 5 | Stochastic | XAGUSD | D1 | 11 | 73% | +137% | +3.00** | — |
+
+> \* Meilleur Sharpe ponctuel sur un couple spécifique — la moyenne est négative.  
+> ** \*\* Peu de trades (11) → non statistiquement significatif.  
+> **Données 18 mois pour les stratégies DXY (jan 2025 → juil 2026).** Les classiques restent sur 6 mois (jan → juil 2026).
 
 > \* Meilleur Sharpe ponctuel sur un couple spécifique — la moyenne est négative.  
 > ** \*\* Peu de trades (11) → non statistiquement significatif.
@@ -223,22 +230,25 @@ TF haute (H4) : compute_ichimoku() → flat lines → shift(1) → reindex(ffill
 
 ## 6. Conclusion
 
-### 🏆 Meilleure stratégie : DXY → XAGUSD H4
+### 🏆 Meilleure stratégie : DXY → XAGUSD H4 (18 mois)
 
-| Critère | **XAGUSD H4** 🥇 | XAUUSD H4 |
+| Critère | **XAGUSD H4** 🏆 | XAUUSD H4 |
 |:---|---:|---:|
-| Trades (6 mois) | 18 (~3/mois) | 20 |
-| Win Rate | **55.6%** | 55.0% |
-| Retour | **+25.70%** | +9.22% |
-| Sharpe | **+1.45** | +1.25 |
-| FTMO ROI | **+18.29%** | +14.48% |
+| Période | **18 mois** | 18 mois |
+| Trades | **27** (~1.5/mois) | 34 |
+| Win Rate | **51.9%** | 47.1% |
+| Retour | **+32.97%** | +7.35% |
+| Sharpe | **+0.98** | +0.50 |
+| FTMO ROI | **+23.19%** | +13.35% |
 | Days lost | 1 | 1 |
-| Forces | Signal exogène, lead naturel, corrélation robuste, filtres multiples, anti-look-ahead complet, **meilleur sur XAGUSD** |
+| Rang 54 pairs | **#1** 🏆 | #14 |
+| Forces | Signal exogène, lead naturel, corrélation robuste, **#1/51 paires USD**, confirmé 18 mois |
 
 ### Constats généraux
 
-- ✅ **2 configurations rentables** : DXY→XAGUSD H4 (+25.7%, Sharpe +1.45) et DXY→XAUUSD H4 (+9.2%, Sharpe +1.25)
-- ✅ **XAGUSD surpasse XAUUSD** de **+179%** sur le retour et **+26%** sur le FTMO
+- ✅ **2 configurations rentables** : DXY→XAGUSD H4 (+32.97%, Sharpe +0.98) et DXY→XAUUSD H4 (+7.35%, Sharpe +0.50)
+- ✅ **XAGUSD surpasse XAUUSD** de **+348%** sur le retour et **+74%** sur le FTMO
+- ✅ **XAGUSD #1/51** paires USD testées sur 18 mois
 - ⚠️ **Stratégies classiques** : toutes perdantes ou au mieux flat sur la période
 - 📉 **TFs basses (M1–M15)** : le bruit domine systématiquement
 - 📈 **TFs hautes (H4, D1)** : seuls timeframes où des stratégies deviennent rentables

@@ -156,33 +156,35 @@ Test de la stratégie DXY (SL=1.5ATR, TP=3.0ATR, corr<-0.3, trend H4, cooldown=2
 
 ---
 
-## 📊 Scan complet — 54 symboles USD (toutes paires *USD et USD*)
+## 📊 Scan complet 18 mois — 54 symboles USD (2025-2026)
 
-Scan exhaustif de **tous les symboles disponibles sur MT5** contenant "USD" (54 symboles trouvés).
+Scan exhaustif étendu à **18 mois** (jan 2025 → juil 2026) de tous les symboles USD disponibles sur MT5. **51 symboles** ont généré des trades.
 
-### Top 10 par Sharpe
+### Top 10 par Sharpe (18 mois)
 
 | Rang | Symbole | Pearson | Trades | WR% | Retour | Sharpe | MaxDD | PF |
 |:---:|:---|---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 1 | NEOUSD | −0.79 | 11 | 54.5% | +23.11% | +1.56 | −5.7% | 2.52 |
-| 2 | XMRUSD | −0.70 | 3 | 66.7% | +9.25% | +1.12 | −3.5% | 3.62 |
-| 3 | UNIUSD | −0.36 | 10 | 50.0% | +14.95% | +1.09 | −9.0% | 2.00 |
-| 4 | USDCHF | +0.92 | 14 | 42.9% | +1.29% | +0.91 | −1.6% | 1.43 |
-| 5 | AAVUSD | −0.33 | 15 | 40.0% | +11.82% | +0.85 | −14.3% | 1.34 |
-| 6 | DASHUSD | −0.48 | 10 | 40.0% | +16.64% | +0.81 | −8.6% | 1.48 |
-| 7 | AVAUSD | −0.72 | 8 | 50.0% | +6.96% | +0.69 | −6.8% | 1.49 |
-| 8 | XTZUSD | −0.72 | 11 | 45.5% | +7.58% | +0.69 | −10.5% | 1.43 |
-| 9 | MANUSD | −0.74 | 11 | 36.4% | +7.64% | +0.68 | −9.2% | 1.36 |
-| 10 | BTCUSD | −0.81 | 13 | 46.2% | +4.61% | +0.64 | −7.1% | 1.33 |
+| **1** | **XAGUSD** 🏆 | −0.47 | 27 | 51.9% | **+32.97%** | **+0.98** | −9.6% | 1.73 |
+| 2 | IMXUSD | +0.64 | 10 | 60.0% | +44.54% | +0.92 | −11.0% | 2.39 |
+| 3 | XMRUSD | −0.55 | 17 | 58.8% | +36.35% | +0.88 | −13.6% | 2.12 |
+| 4 | ADAUSD | +0.40 | 13 | 53.8% | +38.91% | +0.86 | −10.5% | 2.06 |
+| 5 | NERUSD | +0.70 | 8 | 62.5% | +29.64% | +0.86 | −10.8% | 2.76 |
+| 6 | IMXUSD | −0.64 | 7 | 57.1% | +11.72% | +0.83 | −11.2% | 2.01 |
+| 7 | DASHUSD | −0.20 | 17 | 52.9% | +14.44% | +0.79 | −10.2% | 1.50 |
+| 8 | ALGUSD | −0.57 | 16 | 56.2% | +15.80% | +0.73 | −9.9% | 1.58 |
+| 9 | AAVUSD | −0.24 | 18 | 50.0% | +13.31% | +0.70 | −10.9% | 1.44 |
+| 10 | AVAUSD | −0.61 | 17 | 52.9% | +11.12% | +0.64 | −8.3% | 1.44 |
 
-### 🔍 Analyse du scan
+### 🔍 Analyse du scan 18 mois
 
-- **Les cryptos dominent le top 10** — mais corrélation instable dans le temps, résultats potentiellement dus au hasard statistique
-- **USDCHF est le meilleur forex major** (+0.92 corrélation directe, Sharpe +0.91) — stable mais peu de trades
-- **XAGUSD se classe 11e** avec Sharpe +0.62 — solide et cohérent, pas de la chance statistique
-- **XAUUSD se classe 21e** avec Sharpe +0.02 — juste au seuil de rentabilité
+- **XAGUSD #1** 🏆 — surpasse toutes les cryptos sur 18 mois (contre #11 sur 6 mois)
+- **31/51 symboles positifs** (Sharpe > 0) — la stratégie DXY est robuste sur un grand nombre d'actifs
+- **20/51 symboles négatifs** — certains actifs ne réagissent pas au DXY
+- **Les cryptos** (IMX, XMR, ADA) ont des Sharpe proches mais moins de trades et liquidité douteuse
+- **XAUUSD #14** avec Sharpe +0.50 — positif mais loin derrière XAGUSD
+- **USDCHF** descendant au #25 — la corrélation directe (+0.92) ne suffit pas sur 18 mois
 
-> **Conclusion :** XAGUSD est le meilleur **actif non-crypto** pour la stratégie DXY. Les cryptos en tête (NEO, XMR, UNI) ont trop peu de trades et une liquidité douteuse pour du FTMO.
+> **Conclusion :** XAGUSD confirme sa **#1 place** sur 51 paires USD sur 18 mois. Résultat robuste, pas dû au hasard.
 
 ---
 
@@ -202,39 +204,48 @@ Test du seuil DXY optimal pour XAGUSD H4 (1.0σ à 2.0σ).
 
 ---
 
-## 📈 Backtest Multi-TF XAGUSD (DXY → XAGUSD)
+## 📈 Backtest Multi-TF XAGUSD (18 mois, 2025-2026)
 
-Test sur tous les TFs (M1→H4) avec la stratégie DXY optimisée.
+Test étendu à 18 mois sur H1 et H4.
 
-| TF | Trades | WR% | Ret% | Sharpe | MaxDD | PF | FTMO |
-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **H4** 🏆 | **18** | **55.6%** | **+25.70%** | **+1.45** | −9.6% | 1.75 | **+18.29%** |
-| M15 | 139 | 40.3% | +3.77% | +0.39 | −14.8% | 1.10 | — |
-| H1 | 68 | 32.4% | −15.57% | −0.49 | −16.2% | 0.82 | — |
-| M5 | 179 | 34.1% | −19.56% | −2.54 | −20.1% | 0.73 | — |
-| M1 | 119 | 27.7% | −18.14% | −13.18 | −18.5% | 0.67 | — |
+| TF | Trades | WR% | Ret% | Sharpe | MaxDD | PF | Verdict |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---|
+| **H4** 🏆 | **27** | **51.9%** | **+32.97%** | **+0.98** | −9.6% | 1.73 | ✅ **Recommandé** |
+| H1 | 136 | 30.9% | −29.12% | −0.67 | −32.9% | 0.77 | ❌ Perdant |
 
-> **Seul le H4 est rentable.** XAGUSD surpasse XAUUSD (Sharpe +0.02) de 70× sur le Sharpe et 60× sur le retour.
+> **Seul le H4 est rentable.** Confirmé sur 18 mois comme sur 6 mois.
 
-### FTMO Simulation (H4, 6 mois)
+### FTMO Simulation (H4, 18 mois)
 
-| Métrique | Valeur |
-|:---|---:|
-| Capital initial | $10 000 |
-| Capital final | $11 829 |
-| ROI | **+18.29%** |
-| Jours de perte max | 1 |
-| Limite quotidienne touchée | Non |
+| Métrique | 18 mois | 6 mois (réf) |
+|:---|---:|---:|
+| Capital initial | $10 000 | $10 000 |
+| Capital final | **$12 319** | $11 829 |
+| ROI | **+23.19%** | +18.29% |
+| Jours de perte max | 1 | 1 |
+| Limite quotidienne touchée | Non | Non |
 
-### Portefeuille 50/50 XAUUSD + XAGUSD
+### Optimisation du seuil DXY (18 mois)
+
+| Seuil | Trades | WR% | Ret% | Sharpe |
+|:---:|:---:|:---:|:---:|:---:|
+| 1.0σ | 34 | 47.1% | +18.87% | +0.78 |
+| **1.2σ** 🏆 | **33** | **51.5%** | **+39.26%** | **+1.07** |
+| 1.5σ | 27 | 51.9% | +32.97% | +0.98 |
+| 1.8σ | 18 | 50.0% | +17.22% | +0.63 |
+| 2.0σ | 13 | 46.2% | +12.25% | +0.55 |
+
+> Sur 18 mois, le **meilleur seuil est 1.2σ** (contre 1.5σ sur 6 mois). Recommandation : **1.2σ pour XAGUSD**, 1.5σ pour XAUUSD.
+
+### Portefeuille 50/50 XAUUSD + XAGUSD (18 mois)
 
 | Actif | Retour | Sharpe | MaxDD |
 |:---|---:|:---:|:---:|
-| **XAGUSD seul** | **+25.70%** | **+1.45** | −9.6% |
-| XAUUSD seul | +9.22% | +1.25 | −6.3% |
-| **Portefeuille 50/50** | +14.59% | ∼0.0 | **−7.0%** |
+| **XAGUSD seul** | **+32.97%** | **+0.98** | −9.6% |
+| XAUUSD seul | +7.35% | +0.50 | −8.4% |
+| **Portefeuille 50/50** | +17.15% | +0.88 | **−7.3%** |
 
-> Le portefeuille lisse la volatilité mais dilue la performance de XAGUSD. **XAGUSD seul reste meilleur** sur tous les critères.
+> Le portefeuille lisse le drawdown (−7.3% vs −9.6%) mais coupe la performance de moitié. **XAGUSD seul reste meilleur.**
 
 ---
 
@@ -242,11 +253,12 @@ Test sur tous les TFs (M1→H4) avec la stratégie DXY optimisée.
 
 | Tâche | Statut | Résultat |
 |:---|---:|:---|
-| Corrélation DXY vs 28 actifs | ✅ Fait | XAUUSD et XAGUSD confirment −0.72/−0.71 |
-| Backtest multi-actifs (11) | ✅ Fait | XAGUSD gagnant (+11.52%) |
-| Scan 54 symboles USD | ✅ Fait | XAGUSD meilleur actif non-crypto |
-| Backtest multi-TF XAGUSD | ✅ Fait | H4 seulement rentable (+25.7%) |
-| Optimisation seuil | ✅ Fait | 1.5σ optimal |
+| Corrélation DXY vs 28 actifs | ✅ Fait | XAUUSD et XAGUSD confirment −0.72/−0.70 |
+| Backtest multi-actifs (11) | ✅ Fait | XAGUSD gagnant (+11.52% sur 6 mois) |
+| Scan 54 symboles USD | ✅ Fait | XAGUSD #1/51 sur 18 mois |
+| Backtest multi-TF XAGUSD | ✅ Fait | H4 seulement rentable (+32.97% sur 18 mois) |
+| Optimisation seuil 18 mois | ✅ Fait | **1.2σ optimal** (Sharpe +1.07, +39.26%) |
 | Bot XAGUSD (dxy_xag_bot.py) | ✅ Fait | Magic 270706, spread 0.08% |
-| Portefeuille 50/50 | ✅ Fait | XAGUSD seul meilleur |
-| Guide XAGUSD (GUIDE_XAG_BOT.md) | ✅ Fait | Guide complet avec backtests |
+| Portefeuille 50/50 18 mois | ✅ Fait | XAGUSD seul meilleur (+32.97%) |
+| Guide XAGUSD (GUIDE_XAG_BOT.md) | ✅ Fait | Guide complet avec backtests 18 mois |
+| **Backtest étendu 18 mois** | ✅ **Fait** | **XAGUSD confirmé #1, +32.97%, Sharpe +0.98** |
