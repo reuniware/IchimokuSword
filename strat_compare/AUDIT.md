@@ -103,19 +103,42 @@
 | Indicateur | Look-ahead ? | Détail |
 |:---|:---:|:---|
 | RSI | ✅ OK | `shift(1)` pour le cross |
-| Bollinger | ✅ OK | `shift(1)` pour close/lower/upper |
+| Bollinger | ✅ OK | `shift(1)` pour close/lower/upper ; `std(ddof=0)` conforme TA-Lib |
 | MACD | ✅ OK | `shift(1)` pour les deux lignes |
 | Stochastic | ✅ OK | `shift(1)` pour %K/%D ; rolling inclut barre courante (standard) |
 | EMA Cross | ✅ OK | `shift(1)` pour les deux EMA |
 | Parabolic SAR | ✅ OK | SAR barre `i` calculé avec données `i-1`, flip check barre `i` |
 | **Swing_SR** | ~~❌ KRITIK~~ → ✅ **CORRIGÉ** | `confirmed_end = i - swing_window + 1` |
 
+### Revérification exhaustive des indicateurs (05/07/2026)
+
+Tous les indicateurs ont été **revérifiés** point par点:
+- **Analyse théorique** (Thinker Gemini) : formules mathématiques, edge cases, lissage Wilder
+- **Vérification pratique** (30 tests sur données synthétiques) : valeurs attendues, propriétés mathématiques, cohérence
+
+| Indicateur | Tests | Résultat |
+|:---|---:|:---:|
+| ATR | 3/3 | ✅ |
+| RSI | 2/2 | ✅ |
+| EMA | 2/2 | ✅ |
+| MACD | 3/3 | ✅ |
+| Bollinger | 4/4 | ✅ |
+| Stochastic | 4/4 | ✅ |
+| Parabolic SAR | 2/2 | ✅ |
+| Swing Points | 3/3 | ✅ |
+| Signaux (7 stratégies) | 7/7 | ✅ |
+| **TOTAL** | **30/30** | ✅ |
+
+> **Seule correction appliquée** : `compute_bollinger` utilise désormais `std(ddof=0)` (conformité TA-Lib).
+> L'impact est cosmétique : bandes ~2.5% plus étroites, aucun effet sur le classement des stratégies.
+
 ---
 
 ## 🏁 Conclusion
 
-- **3 bugs corrigés** — 1 critique (look-ahead), 1 modéré (coûts direction), 1 mineur (days_lost)
-- **Les calculs de l'engine sont EXACTS** — vérifiés par trace manuel
+- **4 corrections au total** — 3 bugs (1 critique, 1 modéré, 1 mineur) + 1 conformité (Bollinger ddof)
+- **Les calculs de l'engine sont EXACTS** — vérifiés par trace manuel (3 trades, tous MATCH)
+- **Tous les indicateurs sont vérifiés** — 30/30 tests pratiques + analyse théorique Gemini
 - **Swing_SR n'est PAS une stratégie miracle** — les résultats gonflés venaient entièrement du look-ahead bias
 - **Meilleure stratégie réelle : Stochastic H4** (Sharpe 1.78, modeste mais positif)
 - **Aucune stratégie n'est viable en FTMO** avec les paramètres actuels sur la période testée

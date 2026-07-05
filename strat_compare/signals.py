@@ -59,7 +59,7 @@ def compute_bollinger(close: pd.Series, period: int = 20, std: float = 2.0
                       ) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
     """Bollinger Bands. Retourne (middle, upper, lower, width_pct)."""
     middle = close.rolling(period).mean()
-    std_dev = close.rolling(period).std()
+    std_dev = close.rolling(period).std(ddof=0)  # ddof=0 conforme TA-Lib
     upper = middle + std * std_dev
     lower = middle - std * std_dev
     width_pct = (upper - lower) / middle * 100
