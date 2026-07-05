@@ -1,7 +1,7 @@
 # strat_compare/config.py — Configuration du comparateur de strategies
 # ======================================================================
 # Backtest sur la periode 01/01/2026 → 03/07/2026
-# 7 strategies testees en parallele sur les memes donnees
+# Tous les instruments FTMO + 6 timeframes + 7 strategies
 # ======================================================================
 
 import MetaTrader5 as mt5
@@ -10,33 +10,83 @@ import MetaTrader5 as mt5
 START_DATE = "2026-01-01"
 END_DATE = "2026-07-03"
 
-# --- Timeframes ---
+# --- Timeframes (M1 → D1) ---
 TIMEFRAMES = {
-    "H1": mt5.TIMEFRAME_H1,
-    "H4": mt5.TIMEFRAME_H4,
+    "M1":  mt5.TIMEFRAME_M1,
+    "M5":  mt5.TIMEFRAME_M5,
+    "M15": mt5.TIMEFRAME_M15,
+    "H1":  mt5.TIMEFRAME_H1,
+    "H4":  mt5.TIMEFRAME_H4,
+    "D1":  mt5.TIMEFRAME_D1,
 }
 
-# --- Symboles a tester ---
-SYMBOLS = ["EURUSD", "GBPUSD", "XAUUSD"]
+# --- Symboles FTMO (tous les instruments disponibles) ---
+SYMBOLS = [
+    # Forex Majors (7)
+    "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "NZDUSD", "USDCAD",
+    # Forex Minors (10)
+    "EURGBP", "EURJPY", "GBPJPY", "EURCHF", "GBPCHF",
+    "EURAUD", "GBPAUD", "AUDJPY", "NZDJPY", "CADJPY",
+    # Indices (6)
+    "US30", "US100", "US500", "GER40", "UK100", "JPN225",
+    # Commodities (5)
+    "XAUUSD", "XAGUSD", "USOIL", "UKOIL", "XNGUSD",
+    # Crypto (4)
+    "BTCUSD", "ETHUSD", "LTCUSD", "XRPUSD",
+]
 
 # --- Capital et couts ---
 INITIAL_CAPITAL = 10_000.0
 
+# Couts par categorie (spread + slippage en %)
+_FX_MAJOR_COST  = {"spread_pct": 0.005, "slippage_pct": 0.010}
+_FX_MINOR_COST  = {"spread_pct": 0.015, "slippage_pct": 0.015}
+_INDEX_COST     = {"spread_pct": 0.020, "slippage_pct": 0.030}
+_COMMODITY_COST = {"spread_pct": 0.025, "slippage_pct": 0.030}
+_CRYPTO_COST    = {"spread_pct": 0.080, "slippage_pct": 0.050}
+
 COSTS = {
-    "EURUSD":  {"spread_pct": 0.005, "slippage_pct": 0.01},
-    "GBPUSD":  {"spread_pct": 0.008, "slippage_pct": 0.01},
-    "XAUUSD":  {"spread_pct": 0.02,  "slippage_pct": 0.02},
+    # Forex Majors
+    "EURUSD": _FX_MAJOR_COST, "GBPUSD": {"spread_pct": 0.008, "slippage_pct": 0.010},
+    "USDJPY": _FX_MAJOR_COST, "USDCHF": _FX_MAJOR_COST,
+    "AUDUSD": _FX_MAJOR_COST, "NZDUSD": {"spread_pct": 0.010, "slippage_pct": 0.015},
+    "USDCAD": _FX_MAJOR_COST,
+    # Forex Minors
+    "EURGBP": _FX_MINOR_COST, "EURJPY": _FX_MINOR_COST,
+    "GBPJPY": {"spread_pct": 0.020, "slippage_pct": 0.020},
+    "EURCHF": _FX_MINOR_COST, "GBPCHF": _FX_MINOR_COST,
+    "EURAUD": _FX_MINOR_COST, "GBPAUD": _FX_MINOR_COST,
+    "AUDJPY": _FX_MINOR_COST, "NZDJPY": _FX_MINOR_COST,
+    "CADJPY": _FX_MINOR_COST,
+    # Indices
+    "US30":   _INDEX_COST, "US100":  _INDEX_COST, "US500":  _INDEX_COST,
+    "GER40":  _INDEX_COST, "UK100":  _INDEX_COST, "JPN225": _INDEX_COST,
+    # Commodities
+    "XAUUSD": {"spread_pct": 0.020, "slippage_pct": 0.020},
+    "XAGUSD": {"spread_pct": 0.030, "slippage_pct": 0.030},
+    "USOIL":  _COMMODITY_COST, "UKOIL":  _COMMODITY_COST,
+    "XNGUSD": _COMMODITY_COST,
+    # Crypto
+    "BTCUSD": _CRYPTO_COST, "ETHUSD": _CRYPTO_COST,
+    "LTCUSD": _CRYPTO_COST, "XRPUSD": _CRYPTO_COST,
 }
+
+# Fallback par defaut si un symbole n'est pas dans COSTS
+DEFAULT_COST = {"spread_pct": 0.015, "slippage_pct": 0.015}
+
+
+def get_costs(symbol: str) -> dict:
+    """Retourne les couts pour un symbole, avec fallback."""
+    if symbol in COSTS:
+        return COSTS[symbol]
+    print(f"  [WARN] {symbol}: couts par defaut utilises ({DEFAULT_COST['spread_pct']}% spread)")
+    return DEFAULT_COST
+
 
 # --- Parametres communs de risk management ---
 ATR_PERIOD = 14
-RISK_PER_TRADE_PCT = 1.0  # 1% du capital par trade
 
 # --- Strategies ---
-# Chaque strategie a un dict de parametres.
-# sl_atr / tp_atr : multiples d'ATR pour stop-loss et take-profit.
-# 0 pour tp_atr = pas de TP (sortie sur signal oppose uniquement).
-
 STRATEGIES = {
     "RSI": {
         "desc": "RSI(14) mean reversion — achat survendu, vente surachete",

@@ -13,7 +13,7 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 
-from strat_compare.config import INITIAL_CAPITAL, COSTS
+from strat_compare.config import INITIAL_CAPITAL, get_costs
 
 
 @dataclass
@@ -60,7 +60,7 @@ def _apply_costs(price: float, symbol: str, direction: str, is_entry: bool) -> f
     LONG  : entry = achat (ask = price + costs), exit = vente (bid = price - costs)
     SHORT : entry = vente (bid = price - costs), exit = achat (ask = price + costs)
     """
-    costs = COSTS.get(symbol, COSTS["EURUSD"])
+    costs = get_costs(symbol)
     total_pct = (costs["spread_pct"] + costs["slippage_pct"]) / 100.0
     # Achat = price * (1 + total_pct), Vente = price * (1 - total_pct)
     is_buy = (direction == 'LONG' and is_entry) or (direction == 'SHORT' and not is_entry)
