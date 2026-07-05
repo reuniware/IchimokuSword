@@ -123,8 +123,39 @@ DXY.cash
 - **Les forex majors** sont trop corrélés structurellement au DXY (ils le composent)
 - **Les cryptos** ont une corrélation trop instable et faible pour un trading cross-asset fiable
 
-### Prochaines étapes possibles
+---
 
-1. Backtest stratégie DXY→XAGUSD H4 (mêmes paramètres que XAUUSD)
-2. Backtest multi-TF sur XAGUSD (H1, H4, D1)
-3. Backtest combiné XAUUSD + XAGUSD (diversification)
+## 📈 Backtest DXY → Multi-actifs (H4, Jan-Jul 2026)
+
+Test de la stratégie DXY (SL=1.5ATR, TP=3.0ATR, corr<-0.3, trend H4, cooldown=2) sur **11 actifs**.
+
+| Rang | Actif | Catégorie | Trades | WR% | Ret% | Sharpe | MaxDD | PF |
+|:---:|:---|---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **1** | **XAGUSD** 🥇 | Argent | 18 | **50.0%** | **+11.52%** | **+0.62** | −9.6% | 1.32 |
+| 2 | XAUUSD | Or | 16 | 50.0% | +0.43% | +0.02 | −4.5% | 1.03 |
+| 3 | BCHUSD | Bitcoin Cash | 5 | 40.0% | −1.29% | −0.20 | −5.5% | 0.83 |
+| 4 | XPTUSD | Platine | 12 | 33.3% | −2.97% | −0.25 | −8.4% | 0.87 |
+| 5 | EURUSD | Euro | 16 | 31.2% | −1.08% | −0.65 | −1.7% | 0.72 |
+| 6 | EURGBP | EUR/GBP | 4 | 25.0% | −0.34% | −0.67 | −0.8% | 0.60 |
+| 7 | GBPUSD | Livre | 15 | 20.0% | −1.95% | −1.21 | −2.7% | 0.57 |
+| 8 | XPDUSD | Palladium | 11 | 27.3% | −10.00% | −1.37 | −13.7% | 0.52 |
+| 9 | USDCHF | Franc | 1 | 0.0% | −0.61% | −1.39 | −0.6% | 0.00 |
+| 10 | USDCAD | CAD | 1 | 0.0% | −0.44% | −1.39 | −0.4% | 0.00 |
+
+> **USDJPY** : 0 trades (pas assez de signaux passant les filtres).  
+> **XPDUSD/XPTUSD/BCHUSD** : warn coûts par défaut (pas de coûts spécifiques configurés).
+
+### 🏆 Résultat clé
+
+| Actif | Retour 6 mois | Sharpe vs XAUUSD | Pourquoi ? |
+|:---|---|:---:|:---|
+| **XAGUSD (Argent)** 🥇 | **+11.52%** | **+0.62 vs +0.02** | Plus volatile que l'or → les mouvements DXY sont amplifiés |
+| XAUUSD (Or) | +0.43% | Baseline | Mois de juin plombé |
+
+> **XAGUSD surperforme XAUUSD avec la stratégie DXY.** La volatilité supérieure de l'argent amplifie les signaux DXY, ce qui donne des retours 27× supérieurs (+11.5% vs +0.4%) avec un Sharpe 2× meilleur.
+
+### Prochaines étapes
+
+1. Backtest DXY→XAGUSD sur **tous les TFs** (M1, M5, M15, H1, H4, D1) pour trouver le TF optimal
+2. **Trailing stop** sur XAGUSD (la forte volatilité pourrait bénéficier d'un breakeven)
+3. **Portefeuille** XAUUSD + XAGUSD : backtest combiné avec 50/50 du capital pour lisser les résultats
