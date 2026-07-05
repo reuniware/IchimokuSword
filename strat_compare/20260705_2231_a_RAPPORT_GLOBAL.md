@@ -271,13 +271,13 @@ strat_compare/
 ├── _dxy_xau_backtest.py    # Backtest multi-TF DXY → XAUUSD
 ├── _verify_indicators.py   # Tests indicateurs
 ├── _trace_verify.py        # Trace PnL
-├── AUDIT.md                # Rapport d'audit bugs
-├── STRATEGIE_DXY.md        # Doc stratégie DXY → XAU/XAG
-├── GUIDE_DXY_BOT.md        # Guide bot XAUUSD
-├── GUIDE_XAG_BOT.md        # Guide bot XAGUSD 🆕
-├── ANALYSE_CORRELATION_DXY.md # Corrélation DXY vs 28+ actifs
-├── RAPPORT_FTMO.md         # Backtest 32 symboles FTMO
-├── RAPPORT_GLOBAL.md       # Ce fichier
-├── TODO-RESEARCH.md        # Plan test 4 phases
-└── README.md               # Documentation générale
+├── 20260705_1640_AUDIT.md                # Rapport d'audit bugs
+├── 20260705_2215_STRATEGIE_DXY.md        # Doc stratégie DXY → XAU/XAG
+├── 20260705_2248_a_GUIDE_DXY_BOT.md        # Guide bot XAUUSD
+├── 20260705_2248_b_GUIDE_XAG_BOT.md        # Guide bot XAGUSD 🆕
+├── 20260705_2319_ANALYSE_CORRELATION_DXY.md # Corrélation DXY vs 28+ actifs
+├── 20260705_1726_RAPPORT_FTMO.md         # Backtest 32 symboles FTMO
+├── 20260705_2231_a_RAPPORT_GLOBAL.md       # Ce fichier
+├── 20260705_2302_TODO-RESEARCH.md        # Plan test 4 phases
+└── 20260705_1150_b_README.md               # Documentation générale
 ```

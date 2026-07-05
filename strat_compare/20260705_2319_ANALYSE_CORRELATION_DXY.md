@@ -1,4 +1,4 @@
-# ANALYSE_CORRELATION_DXY.md
+# 20260705_2319_ANALYSE_CORRELATION_DXY.md
 
 > **Date :** 05/07/2026  
 > **Analyse :** Corrélation DXY.cash vs tous les actifs disponibles (forex, commodités, indices, cryptos)  
@@ -260,5 +260,5 @@ Test étendu à 18 mois sur H1 et H4.
 | Optimisation seuil 18 mois | ✅ Fait | **1.2σ optimal** (Sharpe +1.07, +39.26%) |
 | Bot XAGUSD (dxy_xag_bot.py) | ✅ Fait | Magic 270706, spread 0.08% |
 | Portefeuille 50/50 18 mois | ✅ Fait | XAGUSD seul meilleur (+32.97%) |
-| Guide XAGUSD (GUIDE_XAG_BOT.md) | ✅ Fait | Guide complet avec backtests 18 mois |
+| Guide XAGUSD (20260705_2248_b_GUIDE_XAG_BOT.md) | ✅ Fait | Guide complet avec backtests 18 mois |
 | **Backtest étendu 18 mois** | ✅ **Fait** | **XAGUSD confirmé #1, +32.97%, Sharpe +0.98** |
