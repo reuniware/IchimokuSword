@@ -2,7 +2,8 @@
 
 > **Script :** `strat_compare/swing_sr_bot.py`  
 > **Stratégie :** Rebonds sur supports/résistances horizontaux (swing highs/lows)  
-> **Broker :** Tous les brokers MetaTrader 5 (quel que soit le serveur)
+> **Broker :** Tous les brokers MetaTrader 5 (quel que soit le serveur)  
+> ⚠️ **Mis à jour le 05/07/2026** — Résultats corrigés après audit (look-ahead bias). Voir [AUDIT.md](AUDIT.md).
 
 ---
 
@@ -24,23 +25,19 @@
 
 ## 2. Actifs conseillés
 
-Basé sur les résultats du backtest (01/01 → 03/07/2026) :
+> ⚠️ Les résultats ci-dessous sont **corrigés** (post-audit du 05/07/2026). Les performances réelles sont modestes.
+
+Basé sur les résultats du backtest corrigé (01/01 → 03/07/2026) :
 
 | Actif | TF | Win Rate | ROI 6 mois | Sharpe | MaxDD | Priorité |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **GBPUSD** | H1 | 83.0% | +158.7% | 8.50 | -3.9% | 🥇 |
-| **EURUSD** | H1 | 79.3% | +120.2% | 7.29 | -3.0% | 🥈 |
-| **XAUUSD** | H1 | 81.3% | +109.5% | 6.87 | -4.0% | 🥉 |
+| **GBPUSD** | H4 | 70.6% | +2.4% | 1.56 | -1.3% | 🥇 |
+| **XAUUSD** | H4 | 66.7% | +3.6% | 0.85 | -5.3% | 🥈 |
+| **EURUSD** | H4 | 64.3% | +1.3% | 0.92 | -1.8% | 🥉 |
 
-> **Recommandation :** utiliser les 3 actifs simultanément pour diversification.  
-> **Timeframe recommandé :** H1 (meilleur ratio trades/performance). H4 fonctionne aussi mais avec moins de trades.  
-> **À éviter :** D1 (trop peu de signaux), M30/M15 (trop de bruit, non backtesté).
-
-### Pourquoi ces actifs fonctionnent
-
-- **GBPUSD** : volatilité modérée + ranges bien définis → beaucoup de swing points exploitables
-- **EURUSD** : range étroit et stable → rebonds très propres, MaxDD le plus bas (-3.0%)
-- **XAUUSD (Or)** : volatilité plus élevée → gains absolus plus grands mais drawdown plus fort (-4.0%)
+> **Recommandation :** H4 est préférable à H1 (moins de bruit). GBPUSD H4 est le plus fiable (MaxDD le plus bas).  
+> **Rentabilité réelle :** ~2-4% sur 6 mois — ne pas s'attendre à des gains explosifs.  
+> **À éviter :** H1 sur XAUUSD et EURUSD (pertes), D1 (trop peu de signaux).
 
 ---
 

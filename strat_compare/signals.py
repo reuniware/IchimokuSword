@@ -450,7 +450,10 @@ def swing_sr_signals(df: pd.DataFrame, swing_window: int = 20,
     result['tp_price'] = np.nan
 
     n = len(df)
-    # Pour chaque barre, trouver le support/resistance le plus proche
+    # Pour chaque barre, trouver le support/resistance le plus proche.
+    # ANTI-LOOK-AHEAD : find_swing_points confirme un swing a l'index j
+    # seulement apres avoir vu les barres [j-window, j+window].
+    # Donc a la barre i, seuls les swings indexes <= i - window sont confirmes.
     for i in range(swing_window * 2, n):
         a = atr.iloc[i]
         if pd.isna(a) or a == 0:
@@ -461,14 +464,20 @@ def swing_sr_signals(df: pd.DataFrame, swing_window: int = 20,
         curr_high = high.iloc[i]
         curr_low = low.iloc[i]
 
-        # Chercher le swing low le plus recent (support)
-        past_lows = low.iloc[max(0, i - swing_window * 4):i]
-        swing_low_mask = is_swing_low.iloc[max(0, i - swing_window * 4):i]
+        # Derniere barre dont les swings sont confirmes (inclus car slice exclusif)
+        confirmed_end = i - swing_window + 1
+        if confirmed_end <= 0:
+            continue
+        search_start = max(0, confirmed_end - swing_window * 4)
+
+        # Chercher le swing low le plus recent (support) — confirme uniquement
+        past_lows = low.iloc[search_start:confirmed_end]
+        swing_low_mask = is_swing_low.iloc[search_start:confirmed_end]
         recent_swing_lows = past_lows[swing_low_mask]
 
-        # Chercher le swing high le plus recent (resistance)
-        past_highs = high.iloc[max(0, i - swing_window * 4):i]
-        swing_high_mask = is_swing_high.iloc[max(0, i - swing_window * 4):i]
+        # Chercher le swing high le plus recent (resistance) — confirme uniquement
+        past_highs = high.iloc[search_start:confirmed_end]
+        swing_high_mask = is_swing_high.iloc[search_start:confirmed_end]
         recent_swing_highs = past_highs[swing_high_mask]
 
         # Signal LONG : prix proche du support et la barre montre un rebond

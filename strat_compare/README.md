@@ -23,43 +23,41 @@
 
 ## 2. Résultats globaux (sans FTMO, capital $10k all-in par trade)
 
+> ⚠️ **Corrigés le 05/07/2026** — Un bug de look-ahead bias dans Swing_SR a été découvert et corrigé.
+> Les résultats ci-dessous reflètent la performance **réelle** sans fuite de données futures.
+> Voir [AUDIT.md](AUDIT.md) pour le détail des bugs trouvés et corrigés.
+
 | Stratégie | Sharpe moy | Win Rate moy | Return moy | MaxDD moy | Trades moy |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| **Swing_SR** 🥇 | **5.47** | **81.8%** | **+24.1%** | **-1.7%** | 62 |
-| MACD 🥈 | 0.76 | 41.0% | +7.2% | -5.4% | 146 |
-| Stochastic 🥉 | 0.54 | 48.8% | +0.2% | -7.2% | 141 |
-| RSI | 0.47 | 44.1% | +2.5% | -3.5% | 55 |
-| Parabolic SAR | 0.22 | 40.6% | +3.1% | -7.0% | 161 |
-| Bollinger | -0.15 | 43.0% | -1.7% | -7.2% | 101 |
-| EMA Cross | -0.24 | 41.4% | +0.7% | -5.7% | 86 |
+| **Stochastic** 🥇 | **-1.08** | 48.3% | **-5.99%** | -11.3% | 43 |
+| RSI 🥈 | -0.25 | 43.4% | -0.09% | -4.3% | 29 |
+| **Swing_SR** 🥉 | **0.01** | 63.6% | -1.30% | -4.9% | 37 |
+| MACD | -1.03 | 39.8% | -0.39% | -8.0% | 62 |
+| Bollinger | -1.30 | 42.7% | -5.68% | -9.3% | 44 |
+| EMA Cross | -1.53 | 41.2% | -3.23% | -7.9% | 38 |
+| Parabolic SAR | -1.68 | 39.4% | -4.38% | -9.9% | 58 |
 
-> **Swing_SR écrase toutes les autres stratégies** avec un Sharpe 7× supérieur au 2ème et un Win Rate 2× supérieur.
+> **Aucune stratégie n'est rentable** sur la période testée avec des coûts réalistes. Le marché de jan-juil 2026 était un range sans tendance claire, défavorable aux stratégies testées.
+> Les meilleurs résultats ponctuels : **Stochastic GBPUSD H4** (Sharpe 1.78, +4.58%) et **Swing_SR GBPUSD H4** (Sharpe 1.56, +2.36%).
 
 ---
 
 ## 3. Résultats FTMO (risque 2%/trade, levier 1:30, limite $485/jour)
 
+> ⚠️ **Corrigés** — Les résultats précédents (+170% ROI) étaient artificiellement gonflés par le look-ahead bias.
+
 | Stratégie | Sharpe moy | Win Rate moy | Return moy | MaxDD moy |
 |:---|:---:|:---:|:---:|:---:|
-| **Swing_SR** 🥇 | **5.66** | 81.8% | **+75.0%** | **-2.9%** |
-| MACD | 1.13 | 40.8% | +25.2% | -17.4% ❌ |
-| Stochastic | 0.65 | 48.7% | +6.1% | -20.9% ❌ |
-| Parabolic SAR | 0.40 | 40.4% | +7.7% | -27.2% ❌ |
-| EMA Cross | 0.28 | 41.3% | +0.4% | -19.7% ❌ |
-| RSI | 0.05 | 44.3% | +2.7% | -12.9% ❌ |
-| Bollinger | -0.29 | 43.0% | -7.4% | -21.7% ❌ |
+| **Swing_SR** | **0.23** | 63.6% | **-0.28%** | -8.4% |
+| RSI | -0.90 | 43.6% | -10.66% | -18.1% |
+| MACD | -1.20 | 39.6% | -19.13% | -32.4% |
+| Stochastic | -1.33 | 48.4% | -22.82% | -35.7% |
+| EMA Cross | -1.40 | 41.0% | -19.32% | -29.4% |
+| Bollinger | -1.71 | 42.7% | -25.86% | -32.1% |
+| Parabolic SAR | -2.04 | 39.1% | -31.48% | -39.9% |
 
-> **Seule Swing_SR respecte les règles FTMO** (MaxDD < 10% + daily loss $485/jour). La limite quotidienne réduit le return de 79.5% → 75.0% (impact mineur car Swing_SR perd rarement $485 en un jour).
-
-### Top 3 FTMO (Swing_SR H1)
-
-| # | Symbole | Trades | Win Rate | Capital final | Gain net | ROI | Sharpe | MaxDD |
-|:--:|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 1 | **GBPUSD** | 106 | 83.0% | **$25 867** | **+$15 867** | **+158.7%** | 8.50 | -3.9% |
-| 2 | EURUSD | 111 | 79.3% | $22 015 | +$12 015 | +120.2% | 7.29 | -3.0% |
-| 3 | XAUUSD | 91 | 81.3% | $20 949 | +$10 949 | +109.5% | 6.87 | -4.0% |
-
-> L'impact de la limite $485/jour : -$1 116 sur GBPUSD, -$761 sur EURUSD, -$836 sur XAUUSD. Perte modérée vu le gain total.
+> **Aucune stratégie n'est viable en FTMO** sur la période. Le position sizing FTMO (risque 2% avec levier) amplifie les pertes.
+> Meilleur résultat FTMO : **Stochastic GBPUSD H4** (+24.9%, Sharpe 2.00, MaxDD -10.5% — mais le MaxDD dépasse la règle FTMO de 10%).
 
 ---
 
@@ -153,18 +151,18 @@ Les signaux consécutifs identiques sont filtrés (une seule entrée par niveau)
 
 ---
 
-## 5. Comparaison H1 vs H4 (Swing_SR)
+## 5. Détail Swing_SR par symbole/timeframe (corrigé)
 
 | Symbole | TF | Trades | Win Rate | Return | Sharpe | MaxDD |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| GBPUSD | H1 | 106 | 83.0% | +17.0% | 7.97 | -0.8% |
-| GBPUSD | H4 | 27 | 77.8% | +8.4% | 4.26 | -1.0% |
-| EURUSD | H1 | 111 | 79.3% | +12.9% | 6.94 | -0.6% |
-| EURUSD | H4 | 22 | 81.8% | +5.9% | 3.28 | -0.9% |
-| XAUUSD | H1 | 91 | 81.3% | +71.9% | 6.32 | -4.1% |
-| XAUUSD | H4 | 16 | 87.5% | +28.3% | 4.04 | -2.5% |
+| GBPUSD | H4 | 17 | 70.6% | +2.36% | 1.56 | -1.3% |
+| XAUUSD | H4 | 18 | 66.7% | +3.58% | 0.85 | -5.3% |
+| EURUSD | H4 | 14 | 64.3% | +1.25% | 0.92 | -1.8% |
+| GBPUSD | H1 | 43 | 65.1% | +1.02% | 0.43 | -3.5% |
+| XAUUSD | H1 | 51 | 58.8% | -8.34% | -0.86 | -11.7% |
+| EURUSD | H1 | 63 | 55.6% | -7.64% | -0.87 | -5.9% |
 
-> **H1 est systématiquement supérieur à H4** (plus de trades, meilleur Sharpe). XAUUSD H1 est le plus rentable en absolu mais avec un MaxDD plus élevé.
+> **H4 est préférable à H1** pour Swing_SR (moins de bruit, meilleur ratio). XAUUSD H4 a le meilleur rendement (+3.6%) mais aussi le MaxDD le plus élevé (-5.3%).
 
 ---
 
@@ -285,16 +283,17 @@ python swing_sr_bot.py --interval 300
 
 ---
 
-## 8. Conclusion
+## 8. Conclusion (corrigée)
 
-Sur la période **janvier→juillet 2026**, la stratégie **Swing_SR** (rebonds sur supports/résistances) domine **très largement** toutes les autres :
+> ⚠️ Les résultats initiaux (Swing_SR Sharpe 5.5, +170% FTMO) étaient **artificiellement gonflés** par un bug de look-ahead bias. Après correction le 05/07/2026, la réalité est plus sobre. Voir [AUDIT.md](AUDIT.md).
 
-- **Sharpe 5.5×** supérieur au 2ème
-- **Win rate 2×** supérieur (82% vs 41-49%)
-- **MaxDD 4×** inférieur (-1.7% vs -5 à -7%)
-- **Seule stratégie viable en FTMO** (MaxDD < 10%)
+### Constats réels
 
-Les stratégies classiques de trend-following (MACD, EMA Cross, Parabolic SAR) et de mean reversion mathématique (RSI, Bollinger, Stochastic) sont **largement battues** par l'approche basée sur les niveaux de prix structurels.
+- **Aucune stratégie n'est rentable** sur la période jan→juil 2026 avec des coûts réalistes
+- **Swing_SR** (Sharpe 0.01, Return -1.3%) n'est pas meilleur que les autres — son avantage apparent était le bug
+- **Stochastic H4** est le meilleur performer ponctuel (Sharpe 1.78, +4.6% GBPUSD) mais pas robuste
+- **Aucune stratégie n'est viable en FTMO** avec le position sizing réel (toutes perdent de l'argent)
+- Le marché de jan→juil 2026 était un **range sans tendance claire** — défavorable aux stratégies testées
 
 ### Limites de l'étude
 
@@ -302,12 +301,12 @@ Les stratégies classiques de trend-following (MACD, EMA Cross, Parabolic SAR) e
 - Marché majoritairement rangeant sur cette période
 - Non testé en conditions de crise ou de tendance forte
 - 3 symboles seulement (forex + or)
-- Les résultats FTMO sont théoriques ( slippage réel, exécution, etc. )
+- Les résultats FTMO sont théoriques (slippage réel, exécution, etc.)
 
 ### Prochaines étapes suggérées
 
-1. **Grid search** sur `swing_window` et `proximity_atr` pour optimiser Swing_SR
-2. **Filtre ADX** : désactiver les trades LONG/SHORT selon le régime de tendance
-3. **Backtest longue période** (2023-2026) pour valider la robustesse
-4. **Ajout d'indices** (US500, GER40) pour diversification
+1. **Backtest longue période** (2020-2026) pour voir le comportement en trend et en crise
+2. **Optimisation des paramètres** par grid search sur chaque stratégie
+3. **Ajout de filtres** (ADX, volatilité, session horaire) pour réduire les faux signaux
+4. **Test sur plus de symboles** (US500, GER40, USDJPY) pour la diversification
 5. **Walk-forward analysis** pour détecter l'overfitting

@@ -120,15 +120,20 @@ def detect_signal(df: pd.DataFrame, config: dict) -> Optional[dict]:
     curr_low = low.iloc[i]
     curr_open = opens.iloc[i]
 
-    # Chercher le swing low le plus recent (support)
-    lb = max(0, i - swing_window * 4)
-    past_lows = low.iloc[lb:i]
-    swing_low_mask = is_swing_low.iloc[lb:i]
+    # ANTI-LOOK-AHEAD : seuls les swings indexes <= i - swing_window sont confirmes
+    confirmed_end = i - swing_window + 1  # +1 car slice Python exclusif a droite
+    if confirmed_end <= 0:
+        return None
+    search_start = max(0, confirmed_end - swing_window * 4)
+
+    # Chercher le swing low le plus recent (support) — confirme uniquement
+    past_lows = low.iloc[search_start:confirmed_end]
+    swing_low_mask = is_swing_low.iloc[search_start:confirmed_end]
     recent_swing_lows = past_lows[swing_low_mask]
 
-    # Chercher le swing high le plus recent (resistance)
-    past_highs = high.iloc[lb:i]
-    swing_high_mask = is_swing_high.iloc[lb:i]
+    # Chercher le swing high le plus recent (resistance) — confirme uniquement
+    past_highs = high.iloc[search_start:confirmed_end]
+    swing_high_mask = is_swing_high.iloc[search_start:confirmed_end]
     recent_swing_highs = past_highs[swing_high_mask]
 
     # Signal LONG

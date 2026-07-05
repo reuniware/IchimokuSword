@@ -54,14 +54,17 @@ class BacktestResult:
     n_trades: int = 0
 
 
-def _apply_costs(price: float, symbol: str, is_entry: bool) -> float:
-    """Applique les couts de transaction."""
+def _apply_costs(price: float, symbol: str, direction: str, is_entry: bool) -> float:
+    """Applique les couts de transaction.
+
+    LONG  : entry = achat (ask = price + costs), exit = vente (bid = price - costs)
+    SHORT : entry = vente (bid = price - costs), exit = achat (ask = price + costs)
+    """
     costs = COSTS.get(symbol, COSTS["EURUSD"])
     total_pct = (costs["spread_pct"] + costs["slippage_pct"]) / 100.0
-    if is_entry:
-        return price * (1 + total_pct)
-    else:
-        return price * (1 - total_pct)
+    # Achat = price * (1 + total_pct), Vente = price * (1 - total_pct)
+    is_buy = (direction == 'LONG' and is_entry) or (direction == 'SHORT' and not is_entry)
+    return price * (1 + total_pct) if is_buy else price * (1 - total_pct)
 
 
 def compute_metrics(result: BacktestResult) -> BacktestResult:
@@ -162,6 +165,7 @@ def run_backtest(df: pd.DataFrame, signals: pd.DataFrame,
     daily_pnl = 0.0
     current_day = None
     days_lost = 0  # nombre de jours ou la limite a ete atteinte
+    daily_limit_hit = False  # evite d'incrementer days_lost plusieurs fois le meme jour
 
     close = df['close']
     high = df['high']
@@ -177,6 +181,7 @@ def run_backtest(df: pd.DataFrame, signals: pd.DataFrame,
         bar_day = current_time.date() if hasattr(current_time, 'date') else current_time
         if current_day is not None and bar_day != current_day:
             daily_pnl = 0.0
+            daily_limit_hit = False
         current_day = bar_day
 
         # --- Si en position, verifier sorties ---
@@ -217,7 +222,7 @@ def run_backtest(df: pd.DataFrame, signals: pd.DataFrame,
                     exit_reason = "signal"
 
             if exit_now:
-                exit_price_cost = _apply_costs(exit_price, symbol, False)
+                exit_price_cost = _apply_costs(exit_price, symbol, position['direction'], False)
 
                 pnl_pct = (exit_price_cost / position['entry_price'] - 1) * 100
                 if position['direction'] == 'SHORT':
@@ -233,16 +238,17 @@ def run_backtest(df: pd.DataFrame, signals: pd.DataFrame,
                 # FTMO daily tracking
                 if ftmo_mode:
                     daily_pnl += pnl_abs
-                    if daily_pnl <= -ftmo_daily_loss_limit:
+                    if daily_pnl <= -ftmo_daily_loss_limit and not daily_limit_hit:
                         days_lost += 1
+                        daily_limit_hit = True
 
                 entry_cost_pct = abs(
-                    (_apply_costs(position['entry_price_raw'], symbol, True)
+                    (_apply_costs(position['entry_price_raw'], symbol, position['direction'], True)
                      - position['entry_price_raw'])
                     / position['entry_price_raw'] * 100
                 )
                 exit_cost_pct = abs(
-                    (_apply_costs(exit_price, symbol, False) - exit_price)
+                    (_apply_costs(exit_price, symbol, position['direction'], False) - exit_price)
                     / exit_price * 100
                 )
 
@@ -276,7 +282,7 @@ def run_backtest(df: pd.DataFrame, signals: pd.DataFrame,
                     continue
 
                 entry_price_raw = curr_close
-                entry_price_cost = _apply_costs(curr_close, symbol, True)
+                entry_price_cost = _apply_costs(curr_close, symbol, sig, True)
 
                 pos_data = {
                     'direction': sig,
@@ -311,7 +317,7 @@ def run_backtest(df: pd.DataFrame, signals: pd.DataFrame,
     # Cloture forcee en fin de backtest
     if position is not None:
         last_close = close.iloc[-1]
-        exit_price_cost = _apply_costs(last_close, symbol, False)
+        exit_price_cost = _apply_costs(last_close, symbol, position['direction'], False)
         pnl_pct = (exit_price_cost / position['entry_price'] - 1) * 100
         if position['direction'] == 'SHORT':
             pnl_pct = -pnl_pct
