@@ -7,7 +7,7 @@
 # look-ahead bias.
 # ======================================================================
 
-from typing import Tuple
+from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -151,6 +151,42 @@ def compute_parabolic_sar(high: pd.Series, low: pd.Series,
 
     return sar
 
+
+# ======================================================================
+# Ichimoku Kinko Hyo
+# ======================================================================
+
+def compute_ichimoku(df: pd.DataFrame, tenkan_p: int = 9, kijun_p: int = 26,
+                     senkou_b_p: int = 52, displacement: int = 26
+                     ) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+    """Composants Ichimoku Kinko Hyo.
+
+    Retourne (tenkan_sen, kijun_sen, senkou_a_active, senkou_b_active).
+    
+    Les Senkou spans sont projetees 26 barres dans le futur dans
+    l'Ichimoku classique. On applique shift(displacement) pour aligner
+    le nuage "actif" avec la barre courante :
+      senkou_active[i] = senkou_raw[i - displacement]
+    """
+    high, low = df['high'], df['low']
+
+    tenkan_sen = (high.rolling(tenkan_p).max() + low.rolling(tenkan_p).min()) / 2
+    kijun_sen = (high.rolling(kijun_p).max() + low.rolling(kijun_p).min()) / 2
+
+    # Senkou bruts (projetes dans le futur)
+    senkou_a_raw = (tenkan_sen + kijun_sen) / 2
+    senkou_b_raw = (high.rolling(senkou_b_p).max() + low.rolling(senkou_b_p).min()) / 2
+
+    # Alignement avec la barre courante
+    senkou_a_active = senkou_a_raw.shift(displacement)
+    senkou_b_active = senkou_b_raw.shift(displacement)
+
+    return tenkan_sen, kijun_sen, senkou_a_active, senkou_b_active
+
+
+# ======================================================================
+# Swing Points (API commune)
+# ======================================================================
 
 def find_swing_points(high: pd.Series, low: pd.Series, window: int = 20
                       ) -> Tuple[pd.Series, pd.Series]:
@@ -561,6 +597,357 @@ def parabolic_sar_signals(df: pd.DataFrame, step: float = 0.02,
     return result
 
 
+def ichimoku_scalp_signals(df: pd.DataFrame, flat_window: int = 7,
+                           flat_threshold_atr: float = 0.01,
+                           sl_atr: float = 0.6, tp_atr: float = 1.5,
+                           atr_period: int = 14,
+                           tenkan_p: int = 9, kijun_p: int = 26,
+                           senkou_b_p: int = 52, displacement: int = 26
+                           ) -> pd.DataFrame:
+    """Ichimoku flat-line scalping.
+
+    Principe :
+    1. Identifier les lignes Ichimoku parfaitement plates (Kijun-sen,
+       Senkou B). Ces plats sont des niveaux d'equilibre solides.
+    2. Entrer des que le prix franchit une ligne plate :
+       - LONG  : close passe au-dessus + bougie haussiere
+       - SHORT : close passe en dessous + bougie baissiere
+    3. SL juste de l'autre cote de la ligne franchie
+    4. TP = prochaine ligne plate dans la direction du trade,
+       ou fallback ATR
+
+    Anti-look-ahead : toutes les valeurs sont calculees sur [0, i].
+    Les Senkou spans sont shiftees de 26 barres (nuage actif = calcule
+    il y a 26 barres).
+    """
+    result = df.copy()
+    close = df['close']
+    high = df['high']
+    low = df['low']
+
+    tenkan, kijun, senkou_a, senkou_b = compute_ichimoku(
+        df, tenkan_p, kijun_p, senkou_b_p, displacement)
+    atr = compute_atr(high, low, close, atr_period)
+
+    result['ichimoku_tenkan'] = tenkan
+    result['ichimoku_kijun'] = kijun
+    result['ichimoku_senkou_a'] = senkou_a
+    result['ichimoku_senkou_b'] = senkou_b
+    result['atr'] = atr
+    result['entry_signal'] = None
+    result['sl_price'] = np.nan
+    result['tp_price'] = np.nan
+
+    # Lignes utilisees pour les entrees (Kijun + Senkou B uniquement —
+    # les plus solides ; Tenkan trop reactif, Senkou A est intermediaire)
+    entry_lines = {'kijun': kijun, 'senkou_b': senkou_b}
+    # Toutes les lignes pour les TP (cibles potentielles)
+    all_lines = {
+        'tenkan': tenkan, 'kijun': kijun,
+        'senkou_a': senkou_a, 'senkou_b': senkou_b,
+    }
+
+    # --- Helper: meilleure ligne d'entree parmi les candidates plates ---
+    def _pick_best_entry(flat_dict, prev_c, curr_c, side):
+        """Retourne (name, value) du meilleur signal d'entree.
+        Priorite Senkou B > Kijun."""
+        candidates = {}
+        for name, val in flat_dict.items():
+            if side == 'LONG' and prev_c < val and curr_c > val:
+                candidates[name] = val
+            elif side == 'SHORT' and prev_c > val and curr_c < val:
+                candidates[name] = val
+        if not candidates:
+            return None, None
+        if 'senkou_b' in candidates:
+            return 'senkou_b', candidates['senkou_b']
+        return list(candidates.items())[0]
+
+    # Besoin minimum:
+    #   senkou_b_p barres pour rolling (52) + displacement shift (26)
+    #   + flat_window-1 (6) = 84. On arrondit a 90 pour marge.
+    start_bar = max(senkou_b_p + displacement + flat_window, 90)
+    n = len(df)
+
+    for i in range(start_bar, n):
+        a = atr.iloc[i]
+        if pd.isna(a) or a == 0:
+            continue
+
+        curr_close = close.iloc[i]
+        prev_close = close.iloc[i - 1]
+        curr_open = df['open'].iloc[i]
+
+        # Detecter les lignes plates (boucle sur all_lines seulement)
+        flat_all = {}
+        for name, line in all_lines.items():
+            line_val = line.iloc[i]
+            if pd.isna(line_val):
+                continue
+            win_start = max(0, i - flat_window + 1)
+            window_vals = line.iloc[win_start:i + 1]
+            line_range = window_vals.max() - window_vals.min()
+            if line_range < flat_threshold_atr * a:
+                flat_all[name] = line_val
+
+        # Filtrer les entrees : seules Kijun et Senkou B comptent
+        flat_entries = {n: v for n, v in flat_all.items() if n in entry_lines}
+        if not flat_entries:
+            continue
+
+        # --- LONG ---
+        long_name, long_val = _pick_best_entry(flat_entries, prev_close, curr_close, 'LONG')
+        if long_name is not None and curr_close > curr_open:
+            sl = long_val - sl_atr * a
+
+            higher = [v for n, v in flat_all.items()
+                      if v > long_val + 0.15 * a]
+            if higher:
+                tp = min(higher)
+            else:
+                tp = curr_close + tp_atr * a
+
+            if tp - curr_close < 0.5 * a:
+                tp = curr_close + tp_atr * a
+
+            result.iloc[i, result.columns.get_loc('entry_signal')] = 'LONG'
+            result.iloc[i, result.columns.get_loc('sl_price')] = sl
+            result.iloc[i, result.columns.get_loc('tp_price')] = tp
+            continue
+
+        # --- SHORT ---
+        short_name, short_val = _pick_best_entry(flat_entries, prev_close, curr_close, 'SHORT')
+        if short_name is not None and curr_close < curr_open:
+            sl = short_val + sl_atr * a
+
+            lower = [v for n, v in flat_all.items()
+                     if v < short_val - 0.15 * a]
+            if lower:
+                tp = max(lower)
+            else:
+                tp = curr_close - tp_atr * a
+
+            if curr_close - tp < 0.5 * a:
+                tp = curr_close - tp_atr * a
+
+            result.iloc[i, result.columns.get_loc('entry_signal')] = 'SHORT'
+            result.iloc[i, result.columns.get_loc('sl_price')] = sl
+            result.iloc[i, result.columns.get_loc('tp_price')] = tp
+
+    # Pas de signaux consecutifs identiques
+    prev_sig = result['entry_signal'].shift(1)
+    result.loc[result['entry_signal'] == prev_sig, 'entry_signal'] = None
+
+    return result
+
+
+def ichimoku_mtf_scalp_signals(df: pd.DataFrame,
+                               higher_tfs: str = '4h,D',
+                               flat_window: int = 5,
+                               flat_threshold_atr: float = 0.01,
+                               sl_atr: float = 0.6, tp_atr: float = 1.5,
+                               atr_period: int = 14,
+                               tenkan_p: int = 9, kijun_p: int = 26,
+                               senkou_b_p: int = 52, displacement: int = 26
+                               ) -> pd.DataFrame:
+    """Ichimoku multi-timeframe flat-line scalping.
+
+    **Concept** :
+    - Flat lines detectees sur TF hautes (W1, D1, H4) → niveaux majeurs
+    - Trading sur la TF basse (celle du DataFrame passe) → scalping
+
+    **Pipeline anti-look-ahead** :
+    1. Resample le DF bas vers chaque TF haute
+    2. compute_ichimoku() sur chaque TF haute
+    3. Detection des lignes plates sur TF haute
+    4. shift(1) → les lignes de la barre N sont disponibles a N+1
+    5. reindex(method='ffill') → projection sur TF basse
+       → a chaque barre basse, seules les lignes des periodes hautes
+         COMPLETEES sont visibles
+    6. Cross detection sur TF basse + bougie confirmative
+
+    **SL/TP** : ATR calcule sur la TF basse (pertinent pour le scalping).
+    """
+    # Mapping TF string → nombre de barres a sauter pour laisser
+    # le temps au resample + Ichimoku de se stabiliser
+    _TF_SKIP = {'W': 300, 'D': 200, '4h': 100, '1h': 50, '12h': 150}
+
+    result = df.copy()
+    close = df['close']
+    high = df['high']
+    low = df['low']
+
+    atr = compute_atr(high, low, close, atr_period)
+    result['atr'] = atr
+    result['entry_signal'] = None
+    result['sl_price'] = np.nan
+    result['tp_price'] = np.nan
+
+    # Parser les TFs hautes (string → liste)
+    if isinstance(higher_tfs, str):
+        tf_list: List[str] = [t.strip() for t in higher_tfs.split(',')]
+    else:
+        tf_list = list(higher_tfs)
+
+    # Pour chaque TF haute, calculer les flat lines et les projeter
+    # sur la TF basse. On merge toutes les flat lines (toutes TFs hautes)
+    # dans un seul dictionnaire de Series (index = TF basse).
+    projected_flat: dict = {}  # line_name → Series sur index bas (NaN si pas flat)
+
+    # Trier les TFs de la plus haute a la plus basse (D > 4h > 1h)
+    # pour que les TFs superieures soient listees en premier dans projected_flat
+    _TF_ORDER = {'W': 4, 'D': 3, '12h': 2, '4h': 1, '1h': 0}
+    tf_list_sorted = sorted(tf_list, key=lambda t: _TF_ORDER.get(t, 0), reverse=True)
+
+    for tf_str in tf_list_sorted:
+        try:
+            # 1. Resample vers TF haute
+            df_h = df.resample(tf_str).agg({
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+            }).dropna()
+
+            if len(df_h) < 30:
+                continue
+
+            # 2. Ichimoku sur TF haute
+            tenkan_h, kijun_h, senkou_a_h, senkou_b_h = compute_ichimoku(
+                df_h, tenkan_p, kijun_p, senkou_b_p, displacement)
+            atr_h = compute_atr(df_h['high'], df_h['low'], df_h['close'],
+                                atr_period)
+
+            # 3. Detection des lignes plates sur TF haute
+            all_lines_h = {
+                'tenkan': tenkan_h, 'kijun': kijun_h,
+                'senkou_a': senkou_a_h, 'senkou_b': senkou_b_h,
+            }
+
+            for line_name, line_h in all_lines_h.items():
+                # Range sur flat_window barres de TF haute
+                line_range = line_h.rolling(flat_window).max() - line_h.rolling(flat_window).min()
+                is_flat = line_range < (flat_threshold_atr * atr_h)
+                # Serie: valeur de la ligne si flat, NaN sinon
+                flat_series_h = line_h.where(is_flat)
+
+                # 4 & 5. shift(1) + reindex ffill → projection anti-look-ahead
+                # shift(1): la flat line de la barre N devient visible a N+1
+                # reindex(ffill): forward-fill sur chaque barre de TF basse
+                flat_projected = (
+                    flat_series_h
+                    .shift(1)
+                    .reindex(df.index, method='ffill')
+                )
+
+                # Nom unique par TF (ex: "kijun_4h", "senkou_b_D")
+                key = f"{line_name}_{tf_str}"
+                projected_flat[key] = flat_projected
+
+        except (ValueError, KeyError):
+            # TF string non supportee par pandas resample
+            continue
+
+    if not projected_flat:
+        return result
+
+    # --- Helper: meilleure entree parmi les lignes plates projetees ---
+    # Les cles sont de la forme "senkou_b_D", "kijun_4h"
+    # Priorite : Senkou B > Kijun > Senkou A > Tenkan
+    # Au sein du meme type de ligne, TF superieure prioritaire (D > 4h > 1h)
+    # projected_flat est deja trie (TFs hautes d'abord)
+    def _pick_best_mtf(flat_dict, prev_c, curr_c, side):
+        priority = ['senkou_b', 'kijun', 'senkou_a', 'tenkan']
+        for pfx in priority:
+            for key, val in flat_dict.items():
+                if not key.startswith(pfx):
+                    continue
+                if side == 'LONG' and prev_c < val and curr_c > val:
+                    return key, val
+                elif side == 'SHORT' and prev_c > val and curr_c < val:
+                    return key, val
+        return None, None
+
+    # --- Boucle principale sur TF basse ---
+    n = len(df)
+    # Calculer le start_bar base sur les TFs hautes demandees
+    min_skip = max(_TF_SKIP.get(tf, 100) for tf in tf_list)
+    start_bar = max(senkou_b_p + displacement + flat_window + 10, min_skip)
+
+    for i in range(start_bar, n):
+        a = atr.iloc[i]
+        if pd.isna(a) or a == 0:
+            continue
+
+        curr_close = close.iloc[i]
+        prev_close = close.iloc[i - 1]
+        curr_open = df['open'].iloc[i]
+
+        # Recuperer les flat lines actives a cette barre (valeur non-NaN = plate)
+        active_flat = {}
+        for key, series in projected_flat.items():
+            val = series.iloc[i]
+            if pd.notna(val):
+                active_flat[key] = val
+
+        if not active_flat:
+            continue
+
+        # Filtrer: seules Kijun et Senkou B pour les entrees
+        entry_candidates = {
+            k: v for k, v in active_flat.items()
+            if k.startswith('kijun') or k.startswith('senkou_b')
+        }
+        if not entry_candidates:
+            continue
+
+        # --- LONG ---
+        long_name, long_val = _pick_best_mtf(entry_candidates, prev_close, curr_close, 'LONG')
+        if long_name is not None and curr_close > curr_open:
+            sl = long_val - sl_atr * a
+
+            # TP: prochaine ligne plate au-dessus (toute ligne, toutes TFs)
+            higher = [v for v in active_flat.values()
+                      if v > long_val + 0.15 * a]
+            if higher:
+                tp = min(higher)
+            else:
+                tp = curr_close + tp_atr * a
+
+            if tp - curr_close < 0.5 * a:
+                tp = curr_close + tp_atr * a
+
+            result.iloc[i, result.columns.get_loc('entry_signal')] = 'LONG'
+            result.iloc[i, result.columns.get_loc('sl_price')] = sl
+            result.iloc[i, result.columns.get_loc('tp_price')] = tp
+            continue
+
+        # --- SHORT ---
+        short_name, short_val = _pick_best_mtf(entry_candidates, prev_close, curr_close, 'SHORT')
+        if short_name is not None and curr_close < curr_open:
+            sl = short_val + sl_atr * a
+
+            lower = [v for v in active_flat.values()
+                     if v < short_val - 0.15 * a]
+            if lower:
+                tp = max(lower)
+            else:
+                tp = curr_close - tp_atr * a
+
+            if curr_close - tp < 0.5 * a:
+                tp = curr_close - tp_atr * a
+
+            result.iloc[i, result.columns.get_loc('entry_signal')] = 'SHORT'
+            result.iloc[i, result.columns.get_loc('sl_price')] = sl
+            result.iloc[i, result.columns.get_loc('tp_price')] = tp
+
+    # Pas de signaux consecutifs identiques
+    prev_sig = result['entry_signal'].shift(1)
+    result.loc[result['entry_signal'] == prev_sig, 'entry_signal'] = None
+
+    return result
+
+
 # ======================================================================
 # Mapping strategy name -> signal function
 # ======================================================================
@@ -573,4 +960,6 @@ SIGNAL_FUNCTIONS = {
     "EMA_Cross": ema_cross_signals,
     "Swing_SR": swing_sr_signals,
     "Parabolic_SAR": parabolic_sar_signals,
+    "Ichimoku_Scalp": ichimoku_scalp_signals,
+    "Ichimoku_MTF": ichimoku_mtf_scalp_signals,
 }

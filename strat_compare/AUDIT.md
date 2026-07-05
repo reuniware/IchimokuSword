@@ -134,12 +134,34 @@ Tous les indicateurs ont été **revérifiés** point par点:
 
 ---
 
+---
+
+## 🆕 Stratégies ajoutées (05-06/07/2026)
+
+### Ichimoku MTF Scalping (`signal.py`)
+
+- `compute_ichimoku()` : Tenkan(9), Kijun(26), Senkou A/B avec shift(26) anti-look-ahead
+- `ichimoku_scalp_signals()` : flat lines sur même TF, cross + bougie confirmative
+- `ichimoku_mtf_scalp_signals()` : flat lines sur TFs hautes (H4, D1), trading sur TF basse (M15) — pipeline `shift(1)+reindex(ffill)` anti-look-ahead
+- Résultat MTF M15 : Sharpe −4.42 (mieux que single-TF −9.56, mais toujours négatif)
+
+### DXY → XAUUSD Correlation (`_dxy_xau_backtest.py`, `_corr_analysis.py`)
+
+- Analyse de corrélation XAUUSD vs DXY.cash : Pearson close −0.72, returns −0.50, DXY lead 5-20 barres
+- Stratégie cross-asset : DXY H1 fort (>1.5σ roulant) → entrée inverse XAUUSD
+- Filtres : rolling corrélation < −0.3, trend H4 DXY, confirmation bougie, cooldown
+- Résultats multi-TF : **H4 rentable** (Sharpe +1.25, +9.2%, FTMO +14.5%), H1 marginal, M15− perdant
+- Voir [STRATEGIE_DXY.md](STRATEGIE_DXY.md) pour l'analyse complète
+
+---
+
 ## 🏁 Conclusion
 
-- **4 corrections au total** — 3 bugs (1 critique, 1 modéré, 1 mineur) + 1 conformité (Bollinger ddof)
+- **6 corrections au total** — 3 bugs (1 critique, 1 modéré, 1 mineur) + 1 conformité (Bollinger ddof) + 2 stratégies ajoutées (Ichimoku MTF, DXY Correlation)
 - **Les calculs de l'engine sont EXACTS** — vérifiés par trace manuel (3 trades, tous MATCH)
 - **Tous les indicateurs sont vérifiés** — 30/30 tests pratiques + analyse théorique Gemini
 - **Swing_SR n'est PAS une stratégie miracle** — les résultats gonflés venaient entièrement du look-ahead bias
-- **Meilleure stratégie réelle : Stochastic H4** (Sharpe 1.78, modeste mais positif)
-- **Aucune stratégie n'est viable en FTMO** avec les paramètres actuels sur la période testée
+- **Meilleure stratégie standard : Stochastic H4** (Sharpe 1.78, modeste mais positif)
+- **Meilleure stratégie cross-asset : DXY→XAUUSD H4** (Sharpe +1.25, +9.2%, FTMO viable)
+- **Aucune stratégie standard n'est viable en FTMO** avec les paramètres actuels sur la période testée
 

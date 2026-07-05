@@ -1,9 +1,10 @@
 # Strat Compare — Comparaison de stratégies sur forex & or
 
 > **Période :** 01/01/2026 → 03/07/2026 (6 mois)  
-> **Données :** MetaTrader5 (EURUSD, GBPUSD, XAUUSD)  
-> **Timeframes :** H1, H4  
-> **Capital initial :** $10 000
+> **Données :** MetaTrader5 (EURUSD, GBPUSD, XAUUSD, DXY.cash)  
+> **Timeframes :** M1, M5, M15, H1, H4, D1  
+> **Capital initial :** $10 000  
+> **Stratégies :** 9 (7 classiques + Ichimoku + DXY Correlation)
 
 ---
 
@@ -18,6 +19,16 @@
 | 5 | **EMA Cross** | Trend following | EMA(9) croise au-dessus (LONG) ou en dessous (SHORT) de EMA(21) |
 | 6 | **Swing_SR** ⭐ | S/R bounces | Rebond sur support/résistance horizontal avec confirmation bougie |
 | 7 | **Parabolic SAR** | Trend following | SAR(0.02, 0.2) flippe de au-dessus à en dessous du prix (LONG) ou inverse |
+| 8 | **Ichimoku Scalp** 🆕 | Flat-line breakout | Cassure d'une ligne Ichimoku plate (Kijun/Senkou B), même TF |
+| 9 | **Ichimoku MTF** 🆕 | MTF Flat-line | Flat lines détectées sur H4/D1, trading sur TF basse (M15) |
+
+### Stratégie cross-asset
+
+| # | Stratégie | Type | Signal d'entrée |
+|:--:|:---|:---|:---|
+| ★ | **DXY → XAUUSD** 🆕 | Correlation | DXY.cash H1 fort (>1.5σ) → entrée inverse XAUUSD |
+
+> Voir [STRATEGIE_DXY.md](STRATEGIE_DXY.md) pour l'analyse complète de la stratégie de corrélation.
 
 ---
 
@@ -172,11 +183,18 @@ Les signaux consécutifs identiques sont filtrés (une seule entrée par niveau)
 strat_compare/
 ├── __init__.py         # Package init
 ├── config.py           # Période, symboles, timeframes, stratégies, coûts
-├── signals.py          # 7 générateurs de signaux + indicateurs communs
+├── signals.py          # 9 générateurs de signaux + indicateurs communs (Ichimoku inclus)
 ├── engine.py           # Moteur de backtesting + mode FTMO
-├── main.py             # CLI : python -m strat_compare.main compare [--ftmo]
+├── main.py             # CLI : python -m strat_compare.main compare [--ftmo] [--tfs ...]
 ├── swing_sr_bot.py     # LIVE TRADING BOT : Swing_SR sur MT5 (tous brokers)
-├── GUIDE.md            # Guide d'utilisation complet du bot (dry-run, reel, actifs)
+├── _corr_analysis.py   # Analyse de corrélation XAUUSD vs DXY.cash
+├── _dxy_xau_backtest.py # Backtest stratégie DXY → XAUUSD (multi-TF)
+├── _verify_indicators.py # Tests de validation des indicateurs (30/30 PASS)
+├── _trace_verify.py    # Trace PnL pas à pas
+├── AUDIT.md            # Rapport d'audit complet (bugs, corrections, validateurs)
+├── STRATEGIE_DXY.md    # Documentation stratégie DXY → XAUUSD
+├── RAPPORT_FTMO.md     # Synthèse backtest 32 symboles FTMO
+├── GUIDE.md            # Guide d'utilisation du bot live
 └── README.md           # Ce fichier
 ```
 

@@ -156,4 +156,23 @@ STRATEGIES = {
             "tp_atr": 2.0,
         },
     },
+    "Ichimoku_Scalp": {
+        "desc": "Ichimoku flat-line scalping — cassure de Kijun/Senkou B plates",
+        "params": {
+            "flat_window": 7,
+            "flat_threshold_atr": 0.01,
+            "sl_atr": 0.6,
+            "tp_atr": 1.5,
+        },
+    },
+    "Ichimoku_MTF": {
+        "desc": "Ichimoku MTF flat-line scalping — flat lines H4/D1, scalping M1/M5/M15",
+        "params": {
+            "higher_tfs": "4h,D",
+            "flat_window": 5,
+            "flat_threshold_atr": 0.01,
+            "sl_atr": 0.6,
+            "tp_atr": 1.5,
+        },
+    },
 }

@@ -3,7 +3,8 @@
 > **Script :** `strat_compare/swing_sr_bot.py`  
 > **Stratégie :** Rebonds sur supports/résistances horizontaux (swing highs/lows)  
 > **Broker :** Tous les brokers MetaTrader 5 (quel que soit le serveur)  
-> ⚠️ **Mis à jour le 05/07/2026** — Résultats corrigés après audit (look-ahead bias). Voir [AUDIT.md](AUDIT.md).
+> ⚠️ **Mis à jour le 05/07/2026** — Résultats corrigés après audit (look-ahead bias). Voir [AUDIT.md](AUDIT.md).  
+> 🆕 **Nouvelles stratégies** — Ichimoku MTF Scalping et DXY→XAUUSD Correlation. Voir [STRATEGIE_DXY.md](STRATEGIE_DXY.md).
 
 ---
 
