@@ -13,7 +13,7 @@ import numpy as np
 from dataclasses import asdict
 
 # Importer la detection SSB et la confiance depuis le module central
-from src.ichimoku import detect_ssb_flat_levels, compute_confidence
+from src.ichimoku import detect_ssb_flat_levels, compute_confidence, detect_flat_line, detect_flat_bars
 
 # Backtest H4: win rate par bracket de score et confiance (LONG only)
 BACKTEST_WIN_RATES = {
@@ -167,30 +167,7 @@ def analyze_chikou(closes, above_kijun):
     return {"value": chikou_val, "above_price": above, "aligned": align}
 
 
-def detect_flat_line(values, lookback=5, tolerance_pct=0.05):
-    """Detecte si une ligne est plate."""
-    if len(values) < lookback + 1:
-        return False
-    seg = values[-(lookback + 1):]
-    base = abs(seg[0]) if seg[0] != 0 else 1
-    variation = (max(seg) - min(seg)) / base * 100.0
-    return variation <= tolerance_pct
 
-
-def detect_flat_bars(values, tolerance_pct=0.05, max_lookback=20):
-    """Depuis combien de bougies une ligne est plate."""
-    if len(values) < 3:
-        return 0
-    count = 0
-    for i in range(min(max_lookback, len(values) - 1)):
-        seg = values[-(i + 3):]
-        base = abs(seg[0]) if seg[0] != 0 else 1
-        var = (max(seg) - min(seg)) / base * 100.0
-        if var <= tolerance_pct:
-            count += 1
-        else:
-            break
-    return count
 
 
 def compute_flat_analysis_recommend(highs, lows, closes, senkou_a, senkou_b, kijun_val, tenkan_val, close_price):

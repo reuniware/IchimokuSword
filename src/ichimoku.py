@@ -590,17 +590,32 @@ def detect_flat_bars(values: np.ndarray, tolerance_pct: float = 0.05,
                       max_lookback: int = 20) -> int:
     """Compte depuis combien de bougies une ligne est plate.
 
-    Retourne le nombre de bougies consecutives ou la ligne est restee plate.
+    Algorithme CORRIGE : utilise un controle GLOBAL max-min sur la fenetre
+    entiere (pas de fenetre glissante qui permettrait une derive cumulative).
+
+    Part de la valeur la plus recente et remonte bougie par bougie.
+    A chaque etape, verifie que TOUTES les valeurs incluses restent
+    dans la bande de tolerance. Des que la variation globale depasse
+    la tolerance, on s'arrete.
+
+    Retourne le nombre de bougies consecutives plates.
     """
     if len(values) < 3:
         return 0
+    n = len(values)
     count = 0
-    for i in range(min(max_lookback, len(values) - 1)):
-        seg = values[-(i + 3):]
-        base = abs(float(seg[0]))
-        if base < 1e-10:
-            break
-        var = (float(np.max(seg)) - float(np.min(seg))) / base * 100.0
+    vals_in_window = []
+    base = abs(float(values[-1]))  # Base = valeur la plus recente
+    if base < 1e-10:
+        return 0
+
+    for i in range(min(max_lookback + 1, n)):
+        idx = n - 1 - i  # De la plus recente vers la plus ancienne
+        v = float(values[idx])
+        vals_in_window.append(v)
+        vmin = min(vals_in_window)
+        vmax = max(vals_in_window)
+        var = (vmax - vmin) / base * 100.0
         if var <= tolerance_pct:
             count += 1
         else:
